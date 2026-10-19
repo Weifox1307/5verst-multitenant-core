@@ -93,7 +93,7 @@ export default {
 };
 
 /**
- * REST запрос к Supabase без npm пакетов
+ * REST запрос к Supabase без npm пакетов с очисткой знака минус
  */
 async function getParkConfigFromDB(env, groupId) {
   const cleanId = Math.abs(Number(groupId));
@@ -211,9 +211,9 @@ async function handleRegisterPark(env, body) {
     });
   }
 
-  // Проверка валидности токена группы ВК
   try {
-    const vkTest = await fetch(`https://api.vk.com/method/groups.getById?group_id=${vk_group_id}&access_token=${vk_access_token}&v=5.131`);
+    const cleanGroupId = Math.abs(Number(vk_group_id));
+    const vkTest = await fetch(`https://api.vk.com/method/groups.getById?group_id=${cleanGroupId}&access_token=${vk_access_token}&v=5.131`);
     const vkData = await vkTest.json();
     if (vkData.error) {
       return new Response(JSON.stringify({ success: false, error: 'Неверный токен группы ВК: ' + vkData.error.error_msg }), {
@@ -238,7 +238,7 @@ async function handleRegisterPark(env, body) {
     park_id: Number(park_id),
     slug: slug,
     name: park_name || `5 вёрст #${park_id}`,
-    vk_group_id: Number(vk_group_id),
+    vk_group_id: Math.abs(Number(vk_group_id)),
     vk_access_token: vk_access_token.trim(),
     chat_ids: [],
     nrms_user: cleanUser,
@@ -289,6 +289,7 @@ async function handleAppGet(url, park) {
     });
   }
 
+  // Поиск участников
   if (url.searchParams.has('search')) {
     const query = url.searchParams.get('search')?.trim() || '';
     const cleanQuery = query.replace(/^A/i, '');
@@ -312,15 +313,40 @@ async function handleAppGet(url, park) {
     });
   }
 
+  // ПОЛУЧЕНИЕ РОСТЕРА ВОЛОНТЕРОВ НА ДАТУ (ИСПРАВЛЕНО ДЛЯ NRMS)
   if (url.searchParams.has('date')) {
     const date = url.searchParams.get('date');
-    const res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
+    
+    // Запрос 1: Основной маршрут получения волонтеров мероприятия
+    let res = await fetch('https://nrms.5verst.ru/api/v1/volunteer/event/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ event_id: park.park_id, event_date: date })
+      body: JSON.stringify({ event_id: park.park_id, date: date, event_date: date })
     });
-    const json = await res.json();
-    return new Response(JSON.stringify(json.result?.volunteer_list || []), {
+    let json = await res.json();
+
+    // Запрос 2: Резервный маршрут, если первый вернул пустоту
+    if (!json.result || (!json.result.volunteers && !json.result.volunteer_list)) {
+      res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ event_id: park.park_id, event_date: date })
+      });
+      json = await res.json();
+    }
+
+    const rawList = json.result?.volunteers || json.result?.volunteer_list || json.result?.data || [];
+    
+    // Нормализация под формат фронтенда
+    const formattedList = rawList.map(v => ({
+      verst_id: v.verst_id || v.athlete_id || v.id,
+      full_name: v.full_name || v.athlete_name || v.name,
+      role_id: v.role_id,
+      role_name: v.role_name || v.name_ru || 'Волонтёр',
+      comment: v.comment || ''
+    }));
+
+    return new Response(JSON.stringify(formattedList), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   }
