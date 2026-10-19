@@ -890,20 +890,27 @@
         document.getElementById('event_date_picker').value = nextSat;
         document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
 
-        // Восстановление выбранного волонтера в поле
+        // Восстановление выбранного волонтера
         if (selectedVolunteer) {
             document.getElementById('verst_search').value = `${selectedVolunteer.full_name} (A${(selectedVolunteer.id||'').toString().replace(/^A/i,'')})`;
         }
 
+        // 1. Извлечение ID сообщества (поддержка мобильного клиента ВК)
         try {
             const urlParams = new URLSearchParams(window.location.search);
             let rawParam = urlParams.get('vk_group_id') || urlParams.get('group_id');
 
-            if (!rawParam && window.location.hash) {
-                const hashClean = window.location.hash.replace('#', '').trim();
-                if (/^-?\d+$/.test(hashClean)) {
-                    rawParam = hashClean;
-                }
+            // Проверка хэша окна и мобильного реферера
+            const fullHash = window.location.hash || '';
+            if (!rawParam && fullHash) {
+                const match = fullHash.match(/-?\d+/);
+                if (match) rawParam = match[0];
+            }
+
+            // Проверка внутреннего параметра vk_url (специфика Android WebView)
+            if (!rawParam && urlParams.get('vk_url')) {
+                const innerMatch = decodeURIComponent(urlParams.get('vk_url')).match(/#(-?\d+)/);
+                if (innerMatch) rawParam = innerMatch[1];
             }
 
             if (rawParam) {
@@ -911,7 +918,7 @@
             }
 
             const launchParams = await vkBridge.send("VKWebAppGetLaunchParams");
-            if (launchParams && launchParams.vk_group_id) {
+            if (launchParams && launchParams.vk_group_id && Number(launchParams.vk_group_id) !== 0) {
                 currentGroupId = Math.abs(parseInt(launchParams.vk_group_id, 10));
             }
         } catch(e) {}
@@ -920,23 +927,26 @@
             vkUser = await vkBridge.send("VKWebAppGetUserInfo");
         } catch(e) {}
 
+        // 2. Запрос конфигурации парка
         try {
-            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.not_configured) {
-                    openModal('modal_onboarding');
-                    return;
-                }
-                if (data.park_name) {
-                    document.getElementById('park_name').innerText = data.park_name;
-                    document.getElementById('about_title').innerText = data.park_name;
-                }
-            } else {
-                document.getElementById('park_name').innerText = "5 вёрст Станкозавод | Нижний Новгород";
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&_t=${Date.now()}`);
+            const data = await res.json();
+            
+            if (data.not_configured) {
+                document.getElementById('park_name').innerText = `Парк не настроен (ID: ${currentGroupId})`;
+                openModal('modal_onboarding');
+                return;
+            }
+
+            if (data.park_name) {
+                document.getElementById('park_name').innerText = data.park_name;
+                document.getElementById('about_title').innerText = data.park_name;
+            } else if (data.error) {
+                document.getElementById('park_name').innerText = "Ошибка парка";
+                showToast(data.error);
             }
         } catch (e) {
-            document.getElementById('park_name').innerText = "5 вёрст Станкозавод | Нижний Новгород";
+            document.getElementById('park_name').innerText = `Ошибка подключения (ID: ${currentGroupId})`;
         }
         
         validateForm();
