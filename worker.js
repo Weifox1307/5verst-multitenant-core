@@ -2,7 +2,6 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Поддержка CORS для VK Mini App
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -27,22 +26,18 @@ export default {
       if (request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
 
-        // Подтверждение сервера Callback API ВКонтакте
         if (body.type === 'confirmation') {
           return new Response("eafd685b", { status: 200 });
         }
 
-        // ШАГ 1 ОНБОРДИНГА: Проверка логина/пароля в NRMS и получение списка доступных парков
         if (body.action === 'check_nrms') {
           return await handleCheckNrms(body);
         }
 
-        // ШАГ 2 ОНБОРДИНГА: Сохранение нового парка в Supabase
         if (body.action === 'register_park') {
           return await handleRegisterPark(env, body);
         }
 
-        // Штатные действия для настроенного парка
         const groupId = body.group_id || url.searchParams.get('group_id');
         if (!groupId) {
           return new Response(JSON.stringify({ error: 'Missing group_id' }), { 
@@ -53,10 +48,14 @@ export default {
 
         const park = await getParkConfigFromDB(env, groupId);
         if (!park) {
-          return new Response(JSON.stringify({ error: `Park with vk_group_id ${groupId} not configured`, not_configured: true }), { 
+          return new Response(JSON.stringify({ error: `Park not found`, not_configured: true }), { 
             status: 404, 
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
           });
+        }
+
+        if (body.action === 'delete') {
+          return await handleDeleteAction(body, park);
         }
 
         return await handleAppAction(body, park);
@@ -67,7 +66,7 @@ export default {
       if (!groupId) {
         return new Response(JSON.stringify({ 
           status: 'online', 
-          message: '5verst Multi-Tenant Core is running. Pass ?group_id=... to query a park.' 
+          message: '5verst Multi-Tenant Core is running.' 
         }), {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
         });
@@ -75,7 +74,7 @@ export default {
 
       const park = await getParkConfigFromDB(env, groupId);
       if (!park) {
-        return new Response(JSON.stringify({ not_configured: true, group_id: Number(groupId) }), { 
+        return new Response(JSON.stringify({ not_configured: true, group_id: Math.abs(Number(groupId)) }), { 
           status: 200, 
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
         });
@@ -92,9 +91,6 @@ export default {
   }
 };
 
-/**
- * Преобразование даты в формат 5 вёрст: "dd.MM.yyyy"
- */
 function formatNrmsDate(dateStr) {
   if (!dateStr) return '';
   if (dateStr.includes('.')) return dateStr;
@@ -105,9 +101,6 @@ function formatNrmsDate(dateStr) {
   return dateStr;
 }
 
-/**
- * Маппинг уникальных позиций под официальные роли NRMS
- */
 function mapRoleForNrms(roleId) {
   const id = Number(roleId);
   if ([1001, 1002, 1003, 1007].includes(id)) return 8; // Чай, Вкусняшки, Вода, Диджей -> Подготовка
@@ -115,9 +108,6 @@ function mapRoleForNrms(roleId) {
   return id;
 }
 
-/**
- * REST запрос к Supabase без npm пакетов с нормализацией ID
- */
 async function getParkConfigFromDB(env, groupId) {
   const cleanId = Math.abs(Number(groupId));
   const endpoint = `${env.SUPABASE_URL}/rest/v1/parks?vk_group_id=eq.${cleanId}&is_active=eq.true&select=*`;
@@ -138,9 +128,6 @@ async function getParkConfigFromDB(env, groupId) {
   return data && data.length > 0 ? data[0] : null;
 }
 
-/**
- * Авторизация в NRMS под логином организатора
- */
 async function getNrmsToken(user, pass) {
   if (!user || !pass) return null;
   
@@ -163,9 +150,6 @@ async function getNrmsToken(user, pass) {
   }
 }
 
-/**
- * Проверка учетки организатора и выдача списка закрепленных парков
- */
 async function handleCheckNrms(body) {
   const user = body.nrms_user;
   const pass = body.nrms_pass;
@@ -209,35 +193,8 @@ async function handleCheckNrms(body) {
   });
 }
 
-/**
- * Сохранение нового парка в Supabase
- */
 async function handleRegisterPark(env, body) {
   const { vk_group_id, park_id, park_name, nrms_user, nrms_pass, vk_access_token } = body;
-
-  if (!vk_group_id || !park_id || !nrms_user || !nrms_pass || !vk_access_token) {
-    return new Response(JSON.stringify({ success: false, error: 'Заполнены не все поля' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
-  }
-
-  try {
-    const cleanGroupId = Math.abs(Number(vk_group_id));
-    const vkTest = await fetch(`https://api.vk.com/method/groups.getById?group_id=${cleanGroupId}&access_token=${vk_access_token}&v=5.131`);
-    const vkData = await vkTest.json();
-    if (vkData.error) {
-      return new Response(JSON.stringify({ success: false, error: 'Неверный токен группы ВК: ' + vkData.error.error_msg }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-      });
-    }
-  } catch (e) {
-    return new Response(JSON.stringify({ success: false, error: 'Ошибка проверки токена ВК' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
-  }
 
   let cleanUser = nrms_user.trim();
   if (!cleanUser.toUpperCase().startsWith('A')) {
@@ -251,7 +208,7 @@ async function handleRegisterPark(env, body) {
     name: park_name || `5 вёрст #${park_id}`,
     vk_group_id: Math.abs(Number(vk_group_id)),
     vk_access_token: vk_access_token.trim(),
-    chat_ids: [],
+    chat_ids: ["2000000001"],
     nrms_user: cleanUser,
     nrms_pass_encrypted: nrms_pass.trim(),
     is_active: true
@@ -269,14 +226,7 @@ async function handleRegisterPark(env, body) {
     body: JSON.stringify(record)
   });
 
-  if (!res.ok) {
-    return new Response(JSON.stringify({ success: false, error: 'Ошибка Supabase: ' + await res.text() }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
-  }
-
-  return new Response(JSON.stringify({ success: true }), {
+  return new Response(JSON.stringify({ success: res.ok }), {
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
   });
 }
@@ -300,7 +250,6 @@ async function handleAppGet(url, park) {
     });
   }
 
-  // Поиск участников
   if (url.searchParams.has('search')) {
     const query = url.searchParams.get('search')?.trim() || '';
     const cleanQuery = query.replace(/^A/i, '');
@@ -327,34 +276,21 @@ async function handleAppGet(url, park) {
     });
   }
 
-  // ПОЛУЧЕНИЕ СПИСКА ВОЛОНТЕРОВ ИЗ NRMS С ФОРМАТОМ ДАТЫ ДД.ММ.ГГГГ
   if (url.searchParams.has('date')) {
     const rawDate = url.searchParams.get('date');
     const nrmsFormattedDate = formatNrmsDate(rawDate);
 
-    const payload = {
-      event_id: park.park_id,
-      event_date: nrmsFormattedDate
-    };
-
     const res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ event_id: park.park_id, event_date: nrmsFormattedDate })
     });
 
     const text = await res.text();
     let json = {};
-    try {
-      json = JSON.parse(text);
-    } catch (e) {
-      return new Response(JSON.stringify([]), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-      });
-    }
+    try { json = JSON.parse(text); } catch (e) {}
 
     const rawList = json.result?.volunteer_list || [];
-    
     const formattedList = rawList.map(v => ({
       verst_id: v.verst_id || v.id,
       full_name: v.full_name || v.name,
@@ -373,6 +309,9 @@ async function handleAppGet(url, park) {
   });
 }
 
+/**
+ * ЗАПИСЬ ВОЛОНТЕРА: ВЫТЯГИВАЕТ ТЕКУЩИЙ РОСТЕР, ОБЪЕДИНЯЕТ И СОХРАНЯЕТ
+ */
 async function handleAppAction(body, park) {
   const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
   if (!token) {
@@ -385,26 +324,58 @@ async function handleAppAction(body, park) {
   if (body.roles && Array.isArray(body.roles)) {
     const verstIdNum = Number(body.verst_id.toString().replace(/^A/i, ''));
     const nrmsFormattedDate = formatNrmsDate(body.target_date);
-    
-    // Сохранение в NRMS с правильным маппингом ролей и форматом даты
+
+    // 1. Получаем текущий состав волонтеров из NRMS
+    let currentVolunteers = [];
+    try {
+      const getRes = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ event_id: park.park_id, event_date: nrmsFormattedDate })
+      });
+      const getData = await getRes.json();
+      currentVolunteers = getData.result?.volunteer_list || [];
+    } catch(e) {}
+
+    // 2. Создаем объединенную мапу
+    const volMap = new Map();
+    currentVolunteers.forEach(v => {
+      const vId = Number(v.verst_id || v.id);
+      const rId = mapRoleForNrms(v.role_id);
+      if (vId && rId) {
+        volMap.set(`${vId}_${rId}`, { verst_id: vId, role_id: rId });
+      }
+    });
+
+    // 3. Добавляем новые роли
+    body.roles.forEach(r => {
+      const mappedRole = mapRoleForNrms(r.id);
+      volMap.set(`${verstIdNum}_${mappedRole}`, { verst_id: verstIdNum, role_id: mappedRole });
+    });
+
+    // 4. Отправляем полный объединенный список обратно в NRMS
+    const savePayload = {
+      event_id: park.park_id,
+      date: nrmsFormattedDate,
+      event_date: nrmsFormattedDate,
+      upload_status_id: 1,
+      volunteers: Array.from(volMap.values())
+    };
+
     await fetch('https://nrms.5verst.ru/api/v1/volunteer/event/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({
-        event_id: park.park_id,
-        date: nrmsFormattedDate,
-        event_date: nrmsFormattedDate,
-        upload_status_id: 1,
-        volunteers: body.roles.map(r => ({ 
-          verst_id: verstIdNum, 
-          role_id: mapRoleForNrms(r.id) 
-        }))
-      })
+      body: JSON.stringify(savePayload)
     });
 
+    // 5. Уведомление в беседу ВК
     if (!(body.silent === true || body.silent === "true")) {
       const roleNames = body.roles.map(r => r.name).join(', ');
-      const msg = `⚡️ Новая запись в парке ${park.name}:\n${body.full_name} — ${roleNames} 🧡`;
+      const userMention = (body.target_vk_id && body.target_vk_id !== "0") 
+        ? `[id${body.target_vk_id}|${body.full_name}]` 
+        : body.full_name;
+
+      const msg = `⚡️ Новая запись в парке ${park.name}:\n${userMention} — ${roleNames} 🧡\n📅 Дата: ${nrmsFormattedDate}`;
       
       const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
       for (const chatId of chatIds) {
@@ -418,7 +389,65 @@ async function handleAppAction(body, park) {
   });
 }
 
+/**
+ * УДАЛЕНИЕ ВОЛОНТЕРА ИЗ РОСТЕРА NRMS
+ */
+async function handleDeleteAction(body, park) {
+  const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'NRMS Authentication failed' }), {
+      status: 401, 
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+    });
+  }
+
+  const verstIdNum = Number((body.verst_id || "0").toString().replace(/^A/i, ''));
+  const roleIdNum = mapRoleForNrms(body.role_id);
+  const nrmsFormattedDate = formatNrmsDate(body.target_date);
+
+  let currentVolunteers = [];
+  try {
+    const getRes = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ event_id: park.park_id, event_date: nrmsFormattedDate })
+    });
+    const getData = await getRes.json();
+    currentVolunteers = getData.result?.volunteer_list || [];
+  } catch(e) {}
+
+  const updatedVolunteers = currentVolunteers
+    .filter(v => !(Number(v.verst_id || v.id) === verstIdNum && mapRoleForNrms(v.role_id) === roleIdNum))
+    .map(v => ({
+      verst_id: Number(v.verst_id || v.id),
+      role_id: mapRoleForNrms(v.role_id)
+    }));
+
+  await fetch('https://nrms.5verst.ru/api/v1/volunteer/event/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({
+      event_id: park.park_id,
+      date: nrmsFormattedDate,
+      event_date: nrmsFormattedDate,
+      upload_status_id: 1,
+      volunteers: updatedVolunteers
+    })
+  });
+
+  const msg = `❌ Отмена записи:\n${body.person_name || 'Волонтёр'} снят(а) с позиции «${body.role_name || 'Волонтёр'}»\n📅 Дата: ${nrmsFormattedDate}`;
+  const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
+  for (const chatId of chatIds) {
+    await sendVkMessage(park.vk_access_token, chatId, msg);
+  }
+
+  return new Response(JSON.stringify({ success: true }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
 async function sendVkMessage(token, peerId, message) {
+  if (!token || token === 'mock_token') return;
   try {
     await fetch(`https://api.vk.com/method/messages.send?peer_id=${peerId}&message=${encodeURIComponent(message)}&random_id=${Math.floor(Math.random() * 1000000)}&access_token=${token}&v=5.131`, {
       method: 'POST'
