@@ -1,3 +1,6 @@
 name = "5verst-multitenant-core"
 main = "worker.js"
 compatibility_date = "2026-01-01"
+
+[vars]
+SUPABASE_URL = "https://baobsbsqedpnmyauhtso.supabase.co"
