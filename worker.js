@@ -14,7 +14,6 @@ export default {
     }
 
     try {
-      // 1. Проверяем наличие ключей окружения
       if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
         return new Response(JSON.stringify({ 
           error: 'Missing environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY' 
@@ -24,14 +23,26 @@ export default {
         });
       }
 
-      // 2. POST ЗАПРОСЫ (Запись, удаление, Callback API ВК)
+      // 1. POST ЗАПРОСЫ
       if (request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
 
+        // Подтверждение сервера Callback API ВКонтакте
         if (body.type === 'confirmation') {
           return new Response("eafd685b", { status: 200 });
         }
 
+        // ШАГ 1 ОНБОРДИНГА: Проверка логина/пароля в NRMS и получение списка доступных парков
+        if (body.action === 'check_nrms') {
+          return await handleCheckNrms(body);
+        }
+
+        // ШАГ 2 ОНБОРДИНГА: Сохранение нового парка в Supabase
+        if (body.action === 'register_park') {
+          return await handleRegisterPark(env, body);
+        }
+
+        // Штатные действия для настроенного парка
         const groupId = body.group_id || url.searchParams.get('group_id');
         if (!groupId) {
           return new Response(JSON.stringify({ error: 'Missing group_id' }), { 
@@ -42,7 +53,7 @@ export default {
 
         const park = await getParkConfigFromDB(env, groupId);
         if (!park) {
-          return new Response(JSON.stringify({ error: `Park with vk_group_id ${groupId} not found in database` }), { 
+          return new Response(JSON.stringify({ error: `Park with vk_group_id ${groupId} not configured`, not_configured: true }), { 
             status: 404, 
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
           });
@@ -51,7 +62,7 @@ export default {
         return await handleAppAction(body, park);
       }
 
-      // 3. GET ЗАПРОСЫ (Поиск участников, получение списка волонтеров)
+      // 2. GET ЗАПРОСЫ
       const groupId = url.searchParams.get('group_id');
       if (!groupId) {
         return new Response(JSON.stringify({ 
@@ -64,8 +75,8 @@ export default {
 
       const park = await getParkConfigFromDB(env, groupId);
       if (!park) {
-        return new Response(JSON.stringify({ error: `Park with vk_group_id ${groupId} not found in database` }), { 
-          status: 404, 
+        return new Response(JSON.stringify({ not_configured: true, group_id: Number(groupId) }), { 
+          status: 200, 
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
         });
       }
@@ -82,7 +93,7 @@ export default {
 };
 
 /**
- * Прямой нативный REST запрос к Supabase без внешних npm-библиотек
+ * REST запрос к Supabase без npm пакетов
  */
 async function getParkConfigFromDB(env, groupId) {
   const endpoint = `${env.SUPABASE_URL}/rest/v1/parks?vk_group_id=eq.${groupId}&is_active=eq.true&select=*`;
@@ -104,7 +115,7 @@ async function getParkConfigFromDB(env, groupId) {
 }
 
 /**
- * Авторизация в NRMS под учеткой парка
+ * Авторизация в NRMS под логином организатора (формат A...)
  */
 async function getNrmsToken(user, pass) {
   if (!user || !pass) return null;
@@ -127,8 +138,138 @@ async function getNrmsToken(user, pass) {
   }
 }
 
+/**
+ * Проверка учетки организатора и выдача списка всех закрепленных за ним парков
+ */
+async function handleCheckNrms(body) {
+  const user = body.nrms_user;
+  const pass = body.nrms_pass;
+
+  if (!user || !pass) {
+    return new Response(JSON.stringify({ success: false, error: 'Заполните логин и пароль' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  }
+
+  const token = await getNrmsToken(user, pass);
+  if (!token) {
+    return new Response(JSON.stringify({ success: false, error: 'Неверный логин или пароль в NRMS' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  }
+
+  let parks = [];
+  try {
+    const profileRes = await fetch('https://nrms.5verst.ru/api/v1/user/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({})
+    });
+    const profileData = await profileRes.json();
+    const eventList = profileData.result?.events || profileData.result?.event_list || [];
+
+    if (Array.isArray(eventList) && eventList.length > 0) {
+      parks = eventList.map(e => ({
+        id: e.id || e.event_id,
+        name: e.name || e.event_name || `Парк #${e.id}`
+      }));
+    }
+  } catch (e) {}
+
+  if (parks.length === 0) {
+    try {
+      const allEventsRes = await fetch('https://nrms.5verst.ru/api/v1/event/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({})
+      });
+      const allData = await allEventsRes.json();
+      if (allData.result?.events) {
+        parks = allData.result.events.map(e => ({ id: e.id, name: e.name }));
+      }
+    } catch (e) {}
+  }
+
+  return new Response(JSON.stringify({ success: true, parks: parks }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
+/**
+ * Сохранение нового парка в Supabase
+ */
+async function handleRegisterPark(env, body) {
+  const { vk_group_id, park_id, park_name, nrms_user, nrms_pass, vk_access_token } = body;
+
+  if (!vk_group_id || !park_id || !nrms_user || !nrms_pass || !vk_access_token) {
+    return new Response(JSON.stringify({ success: false, error: 'Заполнены не все поля' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  }
+
+  // Проверка валидности токена группы ВК
+  try {
+    const vkTest = await fetch(`https://api.vk.com/method/groups.getById?group_id=${vk_group_id}&access_token=${vk_access_token}&v=5.131`);
+    const vkData = await vkTest.json();
+    if (vkData.error) {
+      return new Response(JSON.stringify({ success: false, error: 'Неверный токен группы ВК: ' + vkData.error.error_msg }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+  } catch (e) {
+    return new Response(JSON.stringify({ success: false, error: 'Ошибка проверки токена ВК' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  }
+
+  let cleanUser = nrms_user.trim();
+  if (!cleanUser.toUpperCase().startsWith('A')) {
+    cleanUser = 'A' + cleanUser;
+  }
+
+  const slug = `park-${park_id}`;
+  const record = {
+    park_id: Number(park_id),
+    slug: slug,
+    name: park_name || `5 вёрст #${park_id}`,
+    vk_group_id: Number(vk_group_id),
+    vk_access_token: vk_access_token.trim(),
+    chat_ids: [],
+    nrms_user: cleanUser,
+    nrms_pass_encrypted: nrms_pass.trim(),
+    is_active: true
+  };
+
+  const endpoint = `${env.SUPABASE_URL}/rest/v1/parks`;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'apikey': env.SUPABASE_SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify(record)
+  });
+
+  if (!res.ok) {
+    return new Response(JSON.stringify({ success: false, error: 'Ошибка Supabase: ' + await res.text() }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  }
+
+  return new Response(JSON.stringify({ success: true }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
 async function handleAppGet(url, park) {
-  // Если запрашивают базовую инфу о парке (без дат и поиска)
   if (!url.searchParams.has('search') && !url.searchParams.has('date')) {
     return new Response(JSON.stringify({ 
       park_name: park.name, 
@@ -147,7 +288,6 @@ async function handleAppGet(url, park) {
     });
   }
 
-  // Поиск участников через NRMS API
   if (url.searchParams.has('search')) {
     const query = url.searchParams.get('search')?.trim() || '';
     const cleanQuery = query.replace(/^A/i, '');
@@ -171,7 +311,6 @@ async function handleAppGet(url, park) {
     });
   }
 
-  // Получение ростера на дату
   if (url.searchParams.has('date')) {
     const date = url.searchParams.get('date');
     const res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
