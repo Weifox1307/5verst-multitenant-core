@@ -1,10 +1,10 @@
-import parksConfig from './parks-config.json';
+import { createClient } from '@supabase/supabase-js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Поддержка CORS для запросов из VK Mini App
+    // Поддержка CORS для VK Mini App
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -15,25 +15,33 @@ export default {
       });
     }
 
+    // Подключение к защищенной базе Supabase по переменным окружения
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
     try {
-      // 1. POST ЗАПРОСЫ (Запись волонтера, удаление, подтверждение ВК)
+      // 1. POST ЗАПРОСЫ (Регистрация, удаление, Callback API ВК)
       if (request.method === 'POST') {
         const body = await request.json();
 
+        // Подтверждение сервера Callback API ВКонтакте
         if (body.type === 'confirmation') {
           return new Response("eafd685b", { status: 200 });
         }
 
         const groupId = body.group_id || url.searchParams.get('group_id');
-        const park = parksConfig[groupId];
+        if (!groupId) return new Response(JSON.stringify({ error: 'Missing group_id' }), { status: 400 });
+
+        const park = await getParkConfigFromDB(supabase, groupId);
         if (!park) return new Response(JSON.stringify({ error: 'Park not found' }), { status: 404 });
 
         return await handleAppAction(body, park);
       }
 
-      // 2. GET ЗАПРОСЫ (Поиск участников через NRMS API, получение ростера)
+      // 2. GET ЗАПРОСЫ (Поиск участников, получение списка волонтеров)
       const groupId = url.searchParams.get('group_id');
-      const park = parksConfig[groupId];
+      if (!groupId) return new Response(JSON.stringify({ error: 'Missing group_id' }), { status: 400 });
+
+      const park = await getParkConfigFromDB(supabase, groupId);
       if (!park) return new Response(JSON.stringify({ error: 'Park not found' }), { status: 404 });
 
       return await handleAppGet(url, park);
@@ -47,6 +55,24 @@ export default {
   }
 };
 
+/**
+ * Безопасное получение доступов парка из Supabase
+ */
+async function getParkConfigFromDB(supabase, groupId) {
+  const { data, error } = await supabase
+    .from('parks')
+    .select('*')
+    .eq('vk_group_id', Number(groupId))
+    .eq('is_active', true)
+    .single();
+
+  if (error || !data) return null;
+  return data;
+}
+
+/**
+ * Авторизация в NRMS под учеткой парка (поддержка ID формата A...)
+ */
 async function getNrmsToken(user, pass) {
   let cleanUser = user.trim();
   if (!cleanUser.toUpperCase().startsWith('A')) {
@@ -67,21 +93,25 @@ async function getNrmsToken(user, pass) {
 }
 
 async function handleAppGet(url, park) {
-  const token = await getNrmsToken(park.nrms_user, park.nrms_pass);
+  const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
   if (!token) {
     return new Response(JSON.stringify({ error: 'NRMS Auth failed' }), {
       status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   }
 
-  // Поиск участников (по ID с буквой А или по имени)
+  // Поиск участников
   if (url.searchParams.has('search')) {
     const query = url.searchParams.get('search')?.trim() || '';
     const cleanQuery = query.replace(/^A/i, '');
     const isId = /^\d+$/.test(cleanQuery);
 
-    const endpoint = isId ? 'https://nrms.5verst.ru/api/v1/athlete/getListByIdPart' : 'https://nrms.5verst.ru/api/v1/athlete/getListByNamePart';
-    const payload = isId ? { id: Number(cleanQuery) } : { name: query.toUpperCase(), event_id: park.park_id, registered_only: false };
+    const endpoint = isId 
+      ? 'https://nrms.5verst.ru/api/v1/athlete/getListByIdPart' 
+      : 'https://nrms.5verst.ru/api/v1/athlete/getListByNamePart';
+    const payload = isId 
+      ? { id: Number(cleanQuery) } 
+      : { name: query.toUpperCase(), event_id: park.park_id, registered_only: false };
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -94,7 +124,7 @@ async function handleAppGet(url, park) {
     });
   }
 
-  // Получение списка записанных волонтеров на дату
+  // Получение ростера на дату напрямую из NRMS
   if (url.searchParams.has('date')) {
     const date = url.searchParams.get('date');
     const res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
@@ -108,13 +138,13 @@ async function handleAppGet(url, park) {
     });
   }
 
-  return new Response(JSON.stringify({ name: park.name, park_id: park.park_id }), {
+  return new Response(JSON.stringify({ park_name: park.name, park_id: park.park_id }), {
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
   });
 }
 
 async function handleAppAction(body, park) {
-  const token = await getNrmsToken(park.nrms_user, park.nrms_pass);
+  const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
   if (!token) {
     return new Response(JSON.stringify({ error: 'NRMS Auth failed' }), {
       status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -140,10 +170,9 @@ async function handleAppAction(body, park) {
       const roleNames = body.roles.map(r => r.name).join(', ');
       const msg = `⚡️ Новая запись в парке ${park.name}:\n${body.full_name} — ${roleNames} 🧡`;
       
-      if (park.chat_ids && park.chat_ids.length > 0) {
-        for (const chatId of park.chat_ids) {
-          await sendVkMessage(park.vk_token, chatId, msg);
-        }
+      const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
+      for (const chatId of chatIds) {
+        await sendVkMessage(park.vk_access_token, chatId, msg);
       }
     }
   }
