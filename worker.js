@@ -93,7 +93,30 @@ export default {
 };
 
 /**
- * REST запрос к Supabase без npm пакетов с очисткой знака минус
+ * Преобразование даты в формат 5 вёрст: "dd.MM.yyyy"
+ */
+function formatNrmsDate(dateStr) {
+  if (!dateStr) return '';
+  if (dateStr.includes('.')) return dateStr;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    return `${parts[2]}.${parts[1]}.${parts[0]}`;
+  }
+  return dateStr;
+}
+
+/**
+ * Маппинг уникальных позиций под официальные роли NRMS
+ */
+function mapRoleForNrms(roleId) {
+  const id = Number(roleId);
+  if ([1001, 1002, 1003, 1007].includes(id)) return 8; // Чай, Вкусняшки, Вода, Диджей -> Подготовка
+  if ([1004, 1005, 1006].includes(id)) return 10;     // Оратор, Поддержка, Оркестр -> Разное
+  return id;
+}
+
+/**
+ * REST запрос к Supabase без npm пакетов с нормализацией ID
  */
 async function getParkConfigFromDB(env, groupId) {
   const cleanId = Math.abs(Number(groupId));
@@ -116,7 +139,7 @@ async function getParkConfigFromDB(env, groupId) {
 }
 
 /**
- * Авторизация в NRMS под логином организатора (формат A...)
+ * Авторизация в NRMS под логином организатора
  */
 async function getNrmsToken(user, pass) {
   if (!user || !pass) return null;
@@ -132,7 +155,8 @@ async function getNrmsToken(user, pass) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: cleanUser, password: pass })
     });
-    const data = await res.json();
+    const text = await res.text();
+    const data = JSON.parse(text);
     return data.result?.token || null;
   } catch (e) {
     return null;
@@ -140,7 +164,7 @@ async function getNrmsToken(user, pass) {
 }
 
 /**
- * Проверка учетки организатора и выдача списка всех закрепленных за ним парков
+ * Проверка учетки организатора и выдача списка закрепленных парков
  */
 async function handleCheckNrms(body) {
   const user = body.nrms_user;
@@ -168,7 +192,8 @@ async function handleCheckNrms(body) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({})
     });
-    const profileData = await profileRes.json();
+    const profileText = await profileRes.text();
+    const profileData = JSON.parse(profileText);
     const eventList = profileData.result?.events || profileData.result?.event_list || [];
 
     if (Array.isArray(eventList) && eventList.length > 0) {
@@ -178,20 +203,6 @@ async function handleCheckNrms(body) {
       }));
     }
   } catch (e) {}
-
-  if (parks.length === 0) {
-    try {
-      const allEventsRes = await fetch('https://nrms.5verst.ru/api/v1/event/list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({})
-      });
-      const allData = await allEventsRes.json();
-      if (allData.result?.events) {
-        parks = allData.result.events.map(e => ({ id: e.id, name: e.name }));
-      }
-    } catch (e) {}
-  }
 
   return new Response(JSON.stringify({ success: true, parks: parks }), {
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -307,42 +318,48 @@ async function handleAppGet(url, park) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(payload)
     });
-    const json = await res.json();
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch(e) { json = { result: { data: [] } }; }
+
     return new Response(JSON.stringify(json), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   }
 
-  // ПОЛУЧЕНИЕ РОСТЕРА ВОЛОНТЕРОВ НА ДАТУ (ИСПРАВЛЕНО ДЛЯ NRMS)
+  // ПОЛУЧЕНИЕ СПИСКА ВОЛОНТЕРОВ ИЗ NRMS С ФОРМАТОМ ДАТЫ ДД.ММ.ГГГГ
   if (url.searchParams.has('date')) {
-    const date = url.searchParams.get('date');
-    
-    // Запрос 1: Основной маршрут получения волонтеров мероприятия
-    let res = await fetch('https://nrms.5verst.ru/api/v1/volunteer/event/list', {
+    const rawDate = url.searchParams.get('date');
+    const nrmsFormattedDate = formatNrmsDate(rawDate);
+
+    const payload = {
+      event_id: park.park_id,
+      event_date: nrmsFormattedDate
+    };
+
+    const res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ event_id: park.park_id, date: date, event_date: date })
+      body: JSON.stringify(payload)
     });
-    let json = await res.json();
 
-    // Запрос 2: Резервный маршрут, если первый вернул пустоту
-    if (!json.result || (!json.result.volunteers && !json.result.volunteer_list)) {
-      res = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ event_id: park.park_id, event_date: date })
+    const text = await res.text();
+    let json = {};
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      return new Response(JSON.stringify([]), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
-      json = await res.json();
     }
 
-    const rawList = json.result?.volunteers || json.result?.volunteer_list || json.result?.data || [];
+    const rawList = json.result?.volunteer_list || [];
     
-    // Нормализация под формат фронтенда
     const formattedList = rawList.map(v => ({
-      verst_id: v.verst_id || v.athlete_id || v.id,
-      full_name: v.full_name || v.athlete_name || v.name,
+      verst_id: v.verst_id || v.id,
+      full_name: v.full_name || v.name,
       role_id: v.role_id,
-      role_name: v.role_name || v.name_ru || 'Волонтёр',
+      role_name: v.role_name || 'Волонтёр',
       comment: v.comment || ''
     }));
 
@@ -367,16 +384,21 @@ async function handleAppAction(body, park) {
 
   if (body.roles && Array.isArray(body.roles)) {
     const verstIdNum = Number(body.verst_id.toString().replace(/^A/i, ''));
+    const nrmsFormattedDate = formatNrmsDate(body.target_date);
     
+    // Сохранение в NRMS с правильным маппингом ролей и форматом даты
     await fetch('https://nrms.5verst.ru/api/v1/volunteer/event/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
         event_id: park.park_id,
-        date: body.target_date,
-        event_date: body.target_date,
+        date: nrmsFormattedDate,
+        event_date: nrmsFormattedDate,
         upload_status_id: 1,
-        volunteers: body.roles.map(r => ({ verst_id: verstIdNum, role_id: Number(r.id) }))
+        volunteers: body.roles.map(r => ({ 
+          verst_id: verstIdNum, 
+          role_id: mapRoleForNrms(r.id) 
+        }))
       })
     });
 
