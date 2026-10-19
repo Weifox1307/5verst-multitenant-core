@@ -868,11 +868,15 @@
     }
 
     function getNextSaturday() {
-        const d = new Date();
-        const day = d.getDay();
-        const diff = (day === 6) ? 0 : (6 - day);
-        d.setDate(d.getDate() + diff);
-        return d.toISOString().split('T')[0];
+    const d = new Date();
+    const day = d.getDay();
+    const diff = (day === 6) ? 0 : (6 - day);
+    d.setDate(d.getDate() + diff);
+    
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const date = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${date}`;
     }
 
     function formatDateDisplay(dateStr) {
