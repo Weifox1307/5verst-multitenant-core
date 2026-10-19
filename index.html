@@ -877,43 +877,54 @@
     }
 
     async function init() {
-        const nextSat = getNextSaturday();
-        document.getElementById('event_date_picker').value = nextSat;
-        document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
+    const nextSat = getNextSaturday();
+    document.getElementById('event_date_picker').value = nextSat;
+    document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
 
-        // Парсинг group_id с очисткой знака минус
-        try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const rawParam = urlParams.get('vk_group_id') || urlParams.get('group_id');
-            if (rawParam) {
-                currentGroupId = Math.abs(parseInt(rawParam, 10));
-            }
-            
-            const launchParams = await vkBridge.send("VKWebAppGetLaunchParams");
-            if (launchParams && launchParams.vk_group_id) {
-                currentGroupId = Math.abs(parseInt(launchParams.vk_group_id, 10));
-            }
-        } catch(e) {}
+    // 1. Извлечение group_id из всех возможных источников ВК
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        let rawParam = urlParams.get('vk_group_id') || urlParams.get('group_id');
 
-        try {
-            vkUser = await vkBridge.send("VKWebAppGetUserInfo");
-            
-            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`);
-            const data = await res.json();
-            
-            if (data.not_configured) {
-                openModal('modal_onboarding');
-                return;
+        // Проверка хэша ссылки (vk.ru/app54835513#-228375526)
+        if (!rawParam && window.location.hash) {
+            const hashClean = window.location.hash.replace('#', '').trim();
+            if (/^-?\d+$/.test(hashClean)) {
+                rawParam = hashClean;
             }
+        }
 
-            if (data.park_name) {
-                document.getElementById('park_name').innerText = data.park_name;
-                document.getElementById('about_title').innerText = data.park_name;
-            }
+        if (rawParam) {
+            currentGroupId = Math.abs(parseInt(rawParam, 10));
+        }
 
-            validateForm();
-        } catch (e) { console.error("Init Error:", e); }
-        loadQueue(); 
+        const launchParams = await vkBridge.send("VKWebAppGetLaunchParams");
+        if (launchParams && launchParams.vk_group_id) {
+            currentGroupId = Math.abs(parseInt(launchParams.vk_group_id, 10));
+        }
+    } catch(e) {}
+
+    try {
+        vkUser = await vkBridge.send("VKWebAppGetUserInfo");
+        
+        const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`);
+        const data = await res.json();
+        
+        if (data.not_configured) {
+            openModal('modal_onboarding');
+            return;
+        }
+
+        if (data.park_name) {
+            document.getElementById('park_name').innerText = data.park_name;
+            document.getElementById('about_title').innerText = data.park_name;
+        }
+
+        validateForm();
+    } catch (e) { 
+        console.error("Init Error:", e); 
+    }
+        loadQueue();
     }
     init();
 
