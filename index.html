@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>5 вёрст | Единая платформа волонтёров</title>
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+    <!-- Локальный оффлайн генератор QR без обращений к сторонним серверам -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        @font-face {
+            font-family: '5verstFont';
+            src: url('https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/font.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        :root {
+            --primary: #2B326D;
+            --primary-light: #4f5ca8;
+            --accent: #E6564C;
+            --accent-hover: #d44339;
+            --success: #34c759;
+            --text-dark: #111;
+            --text-muted: #555;
+            
+            /* Glassmorphism Variables */
+            --glass-bg: rgba(255, 255, 255, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.6);
+            --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Roboto, sans-serif;
+            padding: 0;
+            margin: 0;
+            background: #E8EDF2;
+            color: var(--text-dark);
+            padding-bottom: 90px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .mesh-bg {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: -2;
+            background-color: #E8EDF2;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(43, 50, 109, 0.25) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(230, 86, 76, 0.2) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(79, 92, 168, 0.15) 0px, transparent 50%);
+            animation: bgShift 15s ease-in-out infinite alternate;
+        }
+        
+        @keyframes bgShift {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+
+        .noise-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            opacity: 0.4;
+            mix-blend-mode: overlay;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        .tabs-wrapper {
+            position: sticky;
+            top: 10px;
+            z-index: 1000;
+            padding: 0 12px;
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            position: relative;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            padding: 4px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .tab-pill {
+            position: absolute;
+            top: 4px; bottom: 4px; left: 4px;
+            width: calc(25% - 6px);
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 16px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.1, 1), width 0.35s ease;
+            z-index: 1;
+        }
+
+        .tab {
+            flex: 1; text-align: center; padding: 10px 4px; font-weight: 600;
+            color: #666; cursor: pointer; font-size: 11px; text-transform: uppercase;
+            letter-spacing: 0.5px; z-index: 2; position: relative; transition: color 0.25s ease;
+            user-select: none;
+        }
+        .tab.active { color: var(--primary); font-weight: 800; }
+
+        .card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            padding: 20px;
+            border-radius: 24px;
+            box-shadow: var(--glass-shadow);
+            margin: 14px;
+            border: 1px solid rgba(255,255,255,0.7);
+            border-top: 1px solid rgba(255,255,255,0.9);
+            border-left: 1px solid rgba(255,255,255,0.9);
+            transition: transform 0.2s ease;
+        }
+
+        h2 {
+            color: var(--primary); font-size: 18px; font-weight: 800;
+            margin: 0 0 16px 0; display: flex; align-items: center;
+            justify-content: space-between; text-shadow: 0 2px 4px rgba(255,255,255,0.5);
+        }
+
+        .date-badge { color: var(--accent); background: rgba(255,255,255,0.7); padding: 4px 10px; border-radius: 12px; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        .welcome-msg {
+            background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
+            padding: 16px; border-radius: 16px; font-size: 14px;
+            margin-bottom: 16px; color: var(--primary); display: none;
+            border: 1px solid rgba(255,255,255,0.8); line-height: 1.5; box-shadow: inset 0 2px 4px rgba(255,255,255,0.6);
+        }
+
+        .btn-qr, .btn-sync, .btn-story {
+            background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.05) 100%);
+            background-color: var(--primary); color: white; border: 1px solid rgba(255,255,255,0.2);
+            padding: 14px 16px; border-radius: 16px; font-size: 13px; font-weight: 700;
+            margin-top: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            gap: 8px; width: 100%; box-shadow: 0 4px 15px rgba(43, 50, 109, 0.25); transition: all 0.2s ease;
+        }
+        .btn-sync { background-color: var(--success); box-shadow: 0 4px 15px rgba(52, 199, 89, 0.25); }
+        .btn-story { background: linear-gradient(135deg, #FF1A75 0%, #FF7A00 100%); color: white; border:none; box-shadow: 0 4px 15px rgba(255, 26, 117, 0.3); }
+        .btn-qr:active, .btn-sync:active, .btn-story:active { transform: scale(0.97); }
+
+        label {
+            font-size: 11px; color: var(--text-muted); margin-left: 4px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;
+        }
+
+        input, select, textarea {
+            width: 100%; padding: 14px 16px; margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 16px;
+            font-size: 14px; outline: none; background: rgba(255, 255, 255, 0.5);
+            color: var(--text-dark); -webkit-appearance: none; transition: all 0.2s ease;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); backdrop-filter: blur(10px);
+        }
+        input:focus, select:focus, textarea:focus {
+            background: rgba(255, 255, 255, 0.8); border-color: var(--primary-light);
+            box-shadow: 0 0 0 4px rgba(43, 50, 109, 0.1);
+        }
+
+        .comment-box { display: none; margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.4); border-radius: 16px; border: 1px dashed var(--accent); }
+
+        .silent-box {
+            display: flex; align-items: center; gap: 12px; margin: 16px 0; font-size: 13px; color: #333; cursor: pointer; padding: 12px 14px; background: rgba(255,255,255,0.5); border-radius: 16px; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+        .silent-box input[type="checkbox"] { width: 22px; height: 22px; margin: 0; cursor: pointer; flex-shrink: 0; }
+        .silent-box.disabled { opacity: 0.5; cursor: not-allowed; }
+
+        button#submit_btn {
+            width: 100%; padding: 16px; background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%);
+            background-color: var(--accent); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 18px; font-weight: 800; cursor: pointer; font-size: 16px; box-shadow: 0 6px 20px rgba(230, 86, 76, 0.35); transition: all 0.2s ease;
+        }
+        button#submit_btn:active { transform: scale(0.97); }
+        button:disabled { background: #b0b5be !important; box-shadow: none !important; color:#fff; border-color:transparent;}
+
+        .vol-card {
+            background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
+            padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.9);
+            margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        .vol-info-group { display: flex; flex-direction: column; gap: 4px; }
+        .vol-role-badge { background: rgba(43, 50, 109, 0.1); color: var(--primary); padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; width: fit-content; }
+        .vol-name-txt { font-weight: 700; font-size: 14px; color: var(--text-dark); }
+        .btn-delete { background: rgba(255,255,255,0.7); color: #E6564C; border: 1px solid rgba(230, 86, 76, 0.3); padding: 8px 14px; border-radius: 12px; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 2px 6px rgba(230,86,76,0.1); }
+
+        .roles-container { 
+            border: 1px solid rgba(255,255,255,0.8); border-radius: 16px; padding: 6px; 
+            max-height: 280px; overflow-y: auto; background: rgba(255,255,255,0.4); 
+            margin-bottom: 16px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+        }
+        
+        .role-option { 
+            display: flex; align-items: center; padding: 12px; 
+            border: 1px solid transparent;
+            border-bottom: 1px solid rgba(255,255,255,0.5); 
+            cursor: pointer; transition: all 0.2s ease; border-radius: 12px; 
+            margin-bottom: 4px;
+        }
+        
+        .role-option input[type="checkbox"] { 
+            appearance: none; 
+            -webkit-appearance: none; 
+            width: 24px; 
+            height: 24px; 
+            margin-right: 12px; 
+            border: 2px solid rgba(43, 50, 109, 0.3); 
+            border-radius: 6px; 
+            background: rgba(255,255,255,0.6); 
+            display: inline-flex; 
+            align-items: center; 
+            justify-content: center; 
+            transition: all 0.2s ease; 
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        
+        .role-option input[type="checkbox"]:checked {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        
+        .role-option input[type="checkbox"]:checked::after {
+            content: "✓";
+            color: white;
+            font-size: 16px;
+            font-weight: 900;
+        }
+        
+        .role-option span { font-size: 14px; color: var(--text-dark); flex: 1; font-weight:500;}
+        
+        .role-option.selected { 
+            background: rgba(255,255,255,0.95); 
+            border: 1px solid var(--primary-light);
+            box-shadow: 0 4px 15px rgba(43, 50, 109, 0.1); 
+        }
+        .role-option.selected span {
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .group-label { background: rgba(0,0,0,0.03); font-size: 11px; font-weight: 800; padding: 6px 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; border-radius:8px; margin: 4px 0;}
+
+        .rating-item { display: flex; align-items: center; padding: 12px 8px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        .rank { width: 36px; font-weight: 800; color: var(--primary); font-size: 16px; opacity: 0.6; }
+        .user-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        .user-name { font-weight: 700; font-size: 15px; color: var(--text-dark); }
+        .stats-row { display: flex; gap: 6px; flex-wrap: wrap; }
+        .badge { font-size: 10px; padding: 4px 8px; border-radius: 6px; font-weight: 800; text-transform: uppercase; color: #fff; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .run10 { background: #fecc3f; color: #333; } .run25 { background: #f29104; } .run50 { background: #e6464c; } .run100, .run250, .run500 { background: #8c1f28; }
+        .vol10 { background: #c9b4d8; color: #333; } .vol25 { background: #9d82aa; } .vol50 { background: #6c5391; } .vol100, .vol250, .vol500 { background: #422d58; }
+        .badge img { width: 10px; height: 10px; filter: brightness(0) saturate(100%) invert(100%); }
+        .run10 img, .vol10 img { filter: brightness(0) saturate(100%); }
+
+        #toast_container {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(15px); color: white;
+            padding: 14px 24px; border-radius: 30px; font-size: 14px; font-weight: 700;
+            z-index: 3000; box-shadow: 0 10px 30px rgba(0,0,0,0.25); opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; gap: 10px; max-width: 90%; text-align: center; border: 1px solid rgba(255,255,255,0.1);
+        }
+        #toast_container.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            z-index: 2000; align-items: center; justify-content: center; flex-direction: column; padding: 20px;
+        }
+        .modal-content {
+            background: rgba(255, 255, 255, 0.85) !important; padding: 24px; border-radius: 28px;
+            width: 100%; max-width: 340px; box-shadow: 0 25px 50px rgba(0,0,0,0.2);
+            color: var(--text-dark); text-align: center; border: 1px solid rgba(255,255,255,0.9); backdrop-filter: blur(20px);
+        }
+
+        .close-modal { margin-top: 20px; color: white; font-weight: 700; cursor: pointer; font-size: 15px; opacity: 0.9; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius:20px; backdrop-filter: blur(5px); }
+        .role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 15px; }
+        .role-item-btn { background: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.9); padding: 14px 10px; border-radius: 18px; text-align: center; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.03);}
+        .role-item-btn img { width: 50px; height: 50px; margin-bottom: 8px; border-radius: 12px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
+        .role-item-btn span { font-size: 12px; font-weight: 800; color: var(--primary); display: block; line-height: 1.2; }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.4) 25%, rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0.4) 75%);
+            background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 12px;
+        }
+        @keyframes skeleton-loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-card { height: 60px; margin-bottom: 10px; width: 100%; border-radius: 16px; border: 1px solid rgba(255,255,255,0.5); }
+
+        .fab-help {
+            position: fixed; bottom: 24px; right: 24px; width: 54px; height: 54px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.05) 100%);
+            background-color: var(--primary); color: white; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold;
+            box-shadow: 0 8px 25px rgba(43, 50, 109, 0.4); z-index: 1500; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(5px);
+        }
+
+        #search_results, #rate_results {
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.9);
+            border-radius: 16px; max-height: 220px; overflow-y: auto; display: none;
+            position: absolute; width: 100%; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.1); top: 52px;
+        }
+
+        .reg-frame-container { border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.9); margin-top: 12px; height: 550px; background:#fff;}
+        .reg-frame-container iframe { width: 100%; height: 100%; border: none; }
+
+        .timer-container {
+            display: flex; justify-content: center; gap: 12px; margin: 12px 0 20px 0;
+            background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.8);
+            padding: 14px; border-radius: 18px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .timer-unit { display: flex; flex-direction: column; align-items: center; min-width: 48px; }
+        .timer-val { font-size: 20px; font-weight: 800; color: var(--primary); line-height: 1; text-shadow: 0 2px 4px rgba(255,255,255,0.8);}
+        .timer-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; font-weight: 800; }
+        
+        .role-detail-img { width: 100%; height: auto; border-radius: 16px; margin-bottom: 16px; object-fit: cover; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .qr-code-img { width: 200px; height: 200px; margin: 10px auto; display: block; border-radius: 16px; }
+        #qr_canvas_holder { display: flex; justify-content: center; margin: 10px auto; }
+        #qr_canvas_holder canvas { border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        
+        .story-options { margin-top: 16px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 16px; }
+        .story-mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; justify-content: center; }
+        .story-mode-btn { font-size: 12px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.6); cursor: pointer; font-weight: 700; transition: all 0.2s; }
+        .story-mode-btn.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 10px rgba(43,50,109,0.3); }
+        .admin-badge {
+            display: inline-block; background: linear-gradient(135deg, #FFD700, #FDB931); color: #4a3600; font-size: 10px; padding: 2px 6px; border-radius: 6px; font-weight: 900; margin-left: 8px; vertical-align: middle; box-shadow: 0 2px 4px rgba(255, 215, 0, 0.4);
+        }
+        .backup-badge {
+            display: inline-block; background: #34c759; color: white; font-size: 10px; padding: 2px 8px; border-radius: 6px; font-weight: 800; margin-left: 6px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="mesh-bg"></div>
+<div class="noise-bg"></div>
+
+<div id="toast_container">💬 <span id="toast_text"></span></div>
+
+<div class="fab-help" onclick="openModal('modal_help')">?</div>
+
+<div id="modal_help" class="modal" onclick="closeModal('modal_help')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h2 style="justify-content:center; margin-bottom: 15px;">Глоссарий</h2>
+        <button class="btn-qr" onclick="openModal('modal_manual_qr')">⚡ Генератор QR карточки</button>
+        <button class="btn-qr" onclick="openModal('modal_roles')">📖 Описание ролей</button>
+        <button class="btn-qr" onclick="openModal('modal_guide')">📱 Гайд по приложению</button>
+        <button class="btn-qr" onclick="openModal('modal_about')">🌳 О нас</button>
+        <button class="btn-qr" onclick="openSocialLink()">🌐 Наши соцсети</button>
+        <div style="text-align:center; margin-top:16px; font-size:11px; color:#999;">Единое Мульти-Ядро v3.0</div>
+    </div>
+    <div class="close-modal">Закрыть</div>
+</div>
+
+<!-- МОДАЛКА РУЧНОЙ ОФФЛАЙН ГЕНЕРАЦИИ QR-КОДА -->
+<div id="modal_manual_qr" class="modal" onclick="closeModal('modal_manual_qr')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h2>Оффлайн QR карточка</h2>
+        <p style="font-size:13px; color:#555; margin-bottom:12px;">Работает без связи и серверов. Введи свой номер ID:</p>
+        <input type="text" id="manual_qr_input" placeholder="Например: 790217375" style="text-align:center; font-weight:bold; font-size:16px;">
+        <button class="btn-qr" onclick="generateManualQR()">Сгенерировать QR</button>
+        <div id="manual_qr_box" style="margin-top:16px;"></div>
+    </div>
+    <div class="close-modal">Закрыть</div>
+</div>
+
+<div id="modal_roles" class="modal" onclick="closeModal('modal_roles')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width:360px;">
+        <h2>Ключевые роли</h2>
+        <div class="role-grid">
+            <div class="role-item-btn" onclick="showRoleDetail(1, 'Организатор', 'Главный человек на старте. Координирует волонтеров, проводит брифинг и следит за безопасностью.')">
+                <img src="https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/role_1.jpg" onerror="this.src='https://via.placeholder.com/100?text=Role'"><span>Организатор</span>
+            </div>
+            <div class="role-item-btn" onclick="showRoleDetail(2, 'Секундомер', 'Нажимает кнопку СТАРТ и фиксирует время каждого финишера. Самая ответственная роль!')">
+                <img src="https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/role_2.jpg" onerror="this.src='https://via.placeholder.com/100?text=Role'"><span>Секундомер</span>
+            </div>
+            <div class="role-item-btn" onclick="showRoleDetail(11, 'Сканер', 'Сканирует личный штрих-код участника и карточку позиции после финиша.')">
+                <img src="https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/role_11.jpg" onerror="this.src='https://via.placeholder.com/100?text=Role'"><span>Сканер</span>
+            </div>
+            <div class="role-item-btn" onclick="showRoleDetail(13, 'Карточки', 'Выдает карточку с номером позиции каждому, кто пересек финишную черту.')">
+                <img src="https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/role_13.jpg" onerror="this.src='https://via.placeholder.com/100?text=Role'"><span>Карточки</span>
+            </div>
+            <div class="role-item-btn" onclick="showRoleDetail(7, 'Маршал', 'Стоит на ключевых поворотах, указывает путь и подбадривает участников.')">
+                <img src="https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/role_7.jpg" onerror="this.src='https://via.placeholder.com/100?text=Role'"><span>Маршал</span>
+            </div>
+            <div class="role-item-btn" onclick="showRoleDetail(19, 'Замыкающий', 'Идет последним, чтобы никто не остался на трассе один. Финиширует в самом конце.')">
+                <img src="https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/role_19.jpg" onerror="this.src='https://via.placeholder.com/100?text=Role'"><span>Замыкающий</span>
+            </div>
+        </div>
+    </div>
+    <div class="close-modal">Назад</div>
+</div>
+
+<div id="modal_role_detail" class="modal" onclick="closeModal('modal_role_detail')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <img id="role_img" class="role-detail-img" src="">
+        <h2 id="role_title" style="color:var(--primary); margin:0 0 8px 0; justify-content:center;"></h2>
+        <div id="role_desc" style="font-size:14px; line-height:1.5; color:#444;"></div>
+    </div>
+    <div class="close-modal">Назад</div>
+</div>
+
+<div id="modal_guide" class="modal" onclick="closeModal('modal_guide')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h2>Как пользоваться?</h2>
+        <div style="font-size:14px; line-height:1.6; color:#444; text-align:left;">
+            1. 🔍 <b>Поиск / Ввод</b>: Введи фамилию или ID (можно вручную).<br><br>
+            2. ✅ <b>Выбор</b>: Выбери одну или несколько ролей из списка.<br><br>
+            3. 🧡 <b>Рейтинг</b>: Записывайся чаще, чтобы получать бейджи клубов!<br><br>
+            4. 📲 <b>Карточка</b>: Генератор QR работает оффлайн прямо в приложении.
+        </div>
+    </div>
+    <div class="close-modal">Назад</div>
+</div>
+
+<div id="modal_about" class="modal" onclick="closeModal('modal_about')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h2 id="about_title">5 вёрст</h2>
+        <div id="about_text" style="font-size:14px; line-height:1.6; color:#444;">
+            Бесплатные еженедельные старты каждую субботу в 09:00.<br><br>
+            Разработано на Едином Мульти-Арендном Ядре 5 вёрст.
+        </div>
+    </div>
+    <div class="close-modal">Назад</div>
+</div>
+
+<div id="qr_modal" class="modal" onclick="closeQR()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h3 style="color:var(--primary); margin:0 0 12px 0;">Личная карточка</h3>
+        <div id="qr_canvas_holder"></div>
+        <p id="qr_id_text" style="color:var(--accent); margin:12px 0 0 0; font-weight:900; font-size:26px;"></p>
+        <span id="qr_name_text" style="color:#555; font-size:14px; display:block; margin-top:6px; font-weight:600;"></span>
+        
+        <div class="story-options">
+            <div class="story-mode-toggle">
+                <button id="story_mode_default" class="story-mode-btn active" onclick="setStoryMode('default')">Стандартный фон</button>
+                <button id="story_mode_custom" class="story-mode-btn" onclick="setStoryMode('custom')">Своё фото</button>
+            </div>
+            <input type="file" id="story_photo_input" accept="image/*" style="display:none;" onchange="handleStoryPhotoSelect(event)">
+            <button class="btn-story" onclick="shareToStory()">📸 Поделиться в Сторис</button>
+        </div>
+    </div>
+    <div class="close-modal">Закрыть</div>
+</div>
+
+<div class="tabs-wrapper">
+    <div class="tabs">
+        <div class="tab-pill" id="tab_pill"></div>
+        <div id="tab_rec" class="tab active" onclick="switchTab('rec', 0)">ЗАПИСЬ</div>
+        <div id="tab_rate" class="tab" onclick="switchTab('rate', 1)">РЕЙТИНГ</div>
+        <div id="tab_reg" class="tab" onclick="switchTab('reg', 2)">ПОРТАЛ</div>
+        <div id="tab_feed" class="tab" onclick="switchTab('feed', 3)">ОТЗЫВЫ</div>
+    </div>
+</div>
+
+<div id="section_rec">
+    <div class="card" style="border: 1px dashed rgba(230,86,76,0.5); background: rgba(230, 86, 76, 0.05);">
+        <label>Тема старта:</label>
+        <textarea id="theme_input" rows="2" placeholder="Например: Всемирный день поэзии..."></textarea>
+        <button class="btn-qr" style="margin-top:0; height:40px; font-size:13px;" onclick="saveTheme()">Сохранить тему</button>
+        <button id="sync_btn" class="btn-sync" onclick="manualSync()">🔄 Синхронизировать с сайтом</button>
+    </div>
+
+    <div class="card">
+        <h2>
+            <span>Запись на старт</span>
+            <span id="event_date" class="date-badge">...</span>
+        </h2>
+
+        <label>Выберите дату старта:</label>
+        <input type="date" id="event_date_picker" onchange="onDateChange()">
+
+        <div class="timer-container" id="countdown_timer" style="display:none;">
+            <div class="timer-unit"><span class="timer-val" id="t_d">00</span><span class="timer-label">дн</span></div>
+            <div class="timer-unit"><span class="timer-val" id="t_h">00</span><span class="timer-label">час</span></div>
+            <div class="timer-unit"><span class="timer-val" id="t_m">00</span><span class="timer-label">мин</span></div>
+            <div class="timer-unit"><span class="timer-val" id="t_s">00</span><span class="timer-label">сек</span></div>
+        </div>
+        
+        <div style="background: linear-gradient(135deg, rgba(43,50,109,0.8), rgba(79,92,168,0.9)); backdrop-filter: blur(10px); color:white; padding:14px; border-radius:16px; margin:10px 0 20px 0; text-align:center; font-weight:800; font-size:15px; box-shadow:0 6px 15px rgba(43,50,109,0.3); border:1px solid rgba(255,255,255,0.2);">
+            📍 <span id="park_name">Определяем парк...</span>
+        </div>
+        
+        <div id="welcome_back" class="welcome-msg"></div>
+
+        <label>1. Кто пойдет волонтёрить (5 вёрст):</label>
+        <div style="position:relative">
+            <input type="text" id="verst_search" placeholder="Фамилия или ID 5 вёрст..." autocomplete="off">
+            <div id="search_results"></div>
+        </div>
+
+        <label>2. Чей профиль VK привязать:</label>
+        <select id="vk_id_mode" onchange="toggleFriendVk()">
+            <option value="me">Мой профиль</option>
+            <option value="friend">Другой человек</option>
+        </select>
+       
+        <div id="friend_vk_container" style="display:none;">
+            <div id="selected_friend_display" style="display:none; background:rgba(255,255,255,0.6); padding:10px; border-radius:16px; margin-bottom:12px; display:flex; align-items:center; gap:12px; border:1px solid rgba(255,255,255,0.9);">
+                <img id="selected_friend_photo" src="" style="width:40px; height:40px; border-radius:50%; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <div style="flex:1;">
+                    <div id="selected_friend_name" style="font-weight:700; font-size:14px;"></div>
+                    <div id="selected_friend_id" style="font-size:12px; color:#666;"></div>
+                </div>
+                <button onclick="selectAnotherFriend()" style="background:var(--primary); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer;">Сменить</button>
+            </div>
+            <button id="choose_friend_btn" class="btn-qr" onclick="selectFriendFromVK()" style="margin-top:6px;">Выбрать друга из ВК</button>
+            <input type="hidden" id="selected_vk_id">
+            <input type="hidden" id="selected_vk_name">
+        </div>
+        
+        <label>3. Позиции волонтера (одна или несколько):</label>
+        <div class="roles-container" id="roles_checkbox_list">
+            <div class="group-label">Основные позиции</div>
+            <div class="role-option" data-id="1" data-name="Организатор"><input type="checkbox"> <span>Организатор</span></div>
+            <div class="role-option" data-id="2" data-name="Секундомер"><input type="checkbox"> <span>Секундомер</span></div>
+            <div class="role-option" data-id="11" data-name="Сканирование штрих-кодов"><input type="checkbox"> <span>Сканер</span></div>
+            <div class="role-option" data-id="7" data-name="Маршал"><input type="checkbox"> <span>Маршал</span></div>
+            <div class="role-option" data-id="35" data-name="Разметка трассы"><input type="checkbox"> <span>Разметка трассы</span></div>
+            <div class="role-option" data-id="13" data-name="Раздача карточек позиций"><input type="checkbox"> <span>Раздача карточек позиций</span></div>
+            <div class="role-option" data-id="15" data-name="Инструктаж новых участников"><input type="checkbox"> <span>Инструктаж новых участников</span></div>
+            <div class="role-option" data-id="19" data-name="Замыкающий"><input type="checkbox"> <span>Замыкающий</span></div>
+            
+            <div class="group-label">Уникальные позиции</div>
+            <div class="role-option" data-id="1001" data-name="Чай"><input type="checkbox"> <span>Чай</span></div>
+            <div class="role-option" data-id="1002" data-name="Вкусняшки"><input type="checkbox"> <span>Вкусняшки</span></div>
+            <div class="role-option" data-id="1003" data-name="Вода"><input type="checkbox"> <span>Вода</span></div>
+            <div class="role-option" data-id="1004" data-name="Оратор"><input type="checkbox"> <span>Оратор</span></div>
+            <div class="role-option" data-id="1005" data-name="Поддержка на трассе"><input type="checkbox"> <span>Поддержка на трассе</span></div>
+            <div class="role-option" data-id="1006" data-name="Человек Оркестр"><input type="checkbox"> <span>Человек Оркестр</span></div>
+            <div class="role-option" data-id="1007" data-name="Диджей"><input type="checkbox"> <span>Диджей</span></div>
+            
+            <div class="group-label">Дополнительные позиции</div>
+            <div class="role-option" data-id="8" data-name="Подготовка мероприятия"><input type="checkbox"> <span>Подготовка мероприятия</span></div>
+            <div class="role-option" data-id="3" data-name="Сортировка карточек"><input type="checkbox"> <span>Сортировка карточек</span></div>
+            <div class="role-option" data-id="4" data-name="Обработка результатов"><input type="checkbox"> <span>Обработка результатов</span></div>
+            <div class="role-option" data-id="6" data-name="Связи с общественностью"><input type="checkbox"> <span>Связи с общественностью</span></div>
+            <div class="role-option" data-id="9" data-name="Хранение и доставка оборудования"><input type="checkbox"> <span>Хранение и доставка оборудования</span></div>
+            <div class="role-option" data-id="10" data-name="Разное"><input type="checkbox"> <span>Разное</span></div>
+            <div class="role-option" data-id="12" data-name="Завершение мероприятия"><input type="checkbox"> <span>Завершение мероприятия</span></div>
+            <div class="role-option" data-id="14" data-name="Проверка карточек позиций"><input type="checkbox"> <span>Проверка карточек позиций</span></div>
+            <div class="role-option" data-id="16" data-name="Организация финиша"><input type="checkbox"> <span>Организация финиша</span></div>
+            <div class="role-option" data-id="17" data-name="Ведущий велосипед"><input type="checkbox"> <span>Ведущий велосипед</span></div>
+            <div class="role-option" data-id="18" data-name="Помощь в раздаче карточек позиций"><input type="checkbox"> <span>Помощь в раздаче карточек позиций</span></div>
+            <div class="role-option" data-id="20" data-name="Координация волонтёров"><input type="checkbox"> <span>Координация волонтёров</span></div>
+            <div class="role-option" data-id="23" data-name="Составление отчёта"><input type="checkbox"> <span>Составление отчёта</span></div>
+            <div class="role-option" data-id="28" data-name="Пейсмейкер"><input type="checkbox"> <span>Пейсмейкер</span></div>
+            <div class="role-option" data-id="30" data-name="Лидер для слабовидящих"><input type="checkbox"> <span>Лидер для слабовидящих</span></div>
+            <div class="role-option" data-id="31" data-name="Проведение разминки"><input type="checkbox"> <span>Проведение разминки</span></div>
+            <div class="role-option" data-id="32" data-name="Сурдопереводчик"><input type="checkbox"> <span>Сурдопереводчик</span></div>
+            <div class="role-option" data-id="33" data-name="Координатор парковки"><input type="checkbox"> <span>Координатор парковки</span></div>
+            <div class="role-option" data-id="34" data-name="Проверка трассы"><input type="checkbox"> <span>Проверка трассы</span></div>
+            <div class="role-option" data-id="36" data-name="Ведущий мероприятия"><input type="checkbox"> <span>Ведущий мероприятия</span></div>
+            <div class="role-option" data-id="37" data-name="Проведение предстартового брифинга"><input type="checkbox"> <span>Проведение предстартового брифинга</span></div>
+            <div class="role-option" data-id="5" data-name="Фотограф"><input type="checkbox"> <span>Фотограф</span></div>
+            <div class="role-option" data-id="38" data-name="Видеограф"><input type="checkbox"> <span>Видеограф</span></div>
+            <div class="role-option" data-id="39" data-name="Сбор разметки"><input type="checkbox"> <span>Сбор разметки</span></div>
+            <div class="role-option" data-id="40" data-name="Волонтёр-пешеход"><input type="checkbox"> <span>Волонтёр-пешеход</span></div>
+        </div>
+
+        <div id="marshal_container" style="display:none;">
+            <label>Где будет стоять Маршал?</label>
+            <select id="marshal_select" onchange="handleMarshalSelect()">
+                <option value="Сзади ФОКа">Сзади ФОКа</option>
+                <option value="Спереди ФОКа">Спереди ФОКа</option>
+                <option value="На перекрестке у детской площадки">На перекрестке</option>
+                <option value="custom">Свой вариант...</option>
+            </select>
+        </div>
+
+        <div id="pace_container" style="display:none;">
+            <label>Выберите темп:</label>
+            <select id="pace_select" onchange="handlePaceSelect()">
+                <option value="4'30''">4'30''</option>
+                <option value="5'00''">5'00''</option>
+                <option value="5'30''">5'30''</option>
+                <option value="6'00''">6'00''</option>
+                <option value="6'30''">6'30''</option>
+                <option value="7'00''">7'00''</option>
+                <option value="7'30''">7'30''</option>
+                <option value="8'00''">8'00''</option>
+                <option value="custom">Ввести вручную...</option>
+            </select>
+        </div>
+
+        <div id="comment_container" class="comment-box">
+            <label id="comment_label">Уточнение (необязательно):</label>
+            <input type="text" id="role_comment" placeholder="...">
+        </div>
+
+        <label class="silent-box" id="silent_label">
+            <input type="checkbox" id="silent_mode"> Не пинговать чат (тихая запись)
+        </label>
+        <button id="submit_btn" onclick="sendData()" disabled>Записаться</button>
+    </div>
+
+    <div style="margin-left:24px; font-weight:800; color:var(--primary); font-size:13px; text-transform:uppercase; letter-spacing:0.5px;">Уже в списке:</div>
+    <div id="queue_container" style="padding:10px 18px;"></div>
+</div>
+
+<div id="section_rate" style="display:none">
+    <div class="card">
+        <h2>Поиск участника</h2>
+        <label>Найди себя, чтобы привязать профиль:</label>
+        <div style="position:relative">
+            <input type="text" id="rate_search" placeholder="Фамилия или ID..." autocomplete="off">
+            <div id="rate_results"></div>
+        </div>
+    </div>
+    <div class="card">
+        <h2>Клубный рейтинг участников</h2>
+        <div id="rating_list"></div>
+    </div>
+</div>
+
+<div id="section_reg" style="display:none">
+    <div class="card" style="background: linear-gradient(135deg, rgba(43,50,109,0.1), rgba(230,86,76,0.1)); border: 1px solid rgba(255,255,255,0.9);">
+        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 12px;">
+            <div style="font-size: 30px;">📱</div>
+            <div>
+                <h3 style="margin: 0; font-size: 16px; color: var(--primary); font-weight: 900;">Приложение Android</h3>
+                <span style="font-size: 12px; color: var(--text-muted); font-weight:600;">Скачай и будь в курсе всех стартов</span>
+            </div>
+        </div>
+        <button type="button" id="downloadApkBtn" class="btn-qr" style="background: var(--accent); cursor: pointer;">
+            📥 Скачать APK (Android)
+        </button>
+    </div>
+
+    <div class="card">
+        <h2>Портал 5 вёрст</h2>
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom:14px; font-weight:500;">Регистрация, вход и карта локаций всегда под рукой.</p>
+        <div class="reg-frame-container">
+            <iframe src="https://5verst.ru/register/"></iframe>
+        </div>
+    </div>
+</div>
+
+<div id="section_feed" style="display:none">
+    <div class="card">
+        <h2>Обратная связь</h2>
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom:14px; font-weight:500;">Есть идеи по улучшению приложения?</p>
+        <label>Ваше сообщение:</label>
+        <textarea id="feedback_input" rows="5" placeholder="Напишите здесь всё, что считаете нужным..."></textarea>
+        <button id="feedback_btn" class="btn-qr" onclick="sendFeedback()">Отправить</button>
+    </div>
+</div>
+
+<script>
+    vkBridge.send("VKWebAppInit");
+
+    // =========================================================================
+    // ТОЧКА ПОДКЛЮЧЕНИЯ К ЕДИНОМУ СЕРВЕРНОМУ ЯДРУ (CLOUDFLARE WORKER)
+    // =========================================================================
+    const CORE_API_URL = 'https://5verst-multitenant-core.bekovroman0.workers.dev/';
+    const GITHUB_IMG_BASE = 'https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/';
+    
+    let selectedVolunteer = null;
+    let vkUser = null;
+    let customStoryImage = null;
+    let storyMode = 'default';
+    let isAdmin = false;
+    let currentGroupId = 228375526; // По умолчанию Станкозавод, перезаписывается из параметров запуска ВК
+
+    const runIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M13.49 5.42c1.23 0 2.22-1 2.22-2.22A2.22 2.22 0 0 0 13.5 1a2.22 2.22 0 0 0-2.23 2.22c0 1.22.99 2.2 2.22 2.2M10.34 11l-2.1-1.03c-.34-.17-.55-.52-.55-.91 0-.74.79-1.22 1.45-.91l4.83 2.3c.53.25.87.78.87 1.37V17h-2v-4.43l-1.74-.83V23h-2v-6.95l.45-1.5L7.2 13c-.34-.16-.55-.52-.55-.9 0-.75.8-1.23 1.46-.9l2.23 1.03V11z'/%3E%3C/svg%3E" />`;
+    const volIcon = "🧡 ";
+
+    document.getElementById('downloadApkBtn').addEventListener('click', function() {
+        const apkUrl = 'https://apk-downloader.bekovroman0.workers.dev/';
+        if (typeof vkBridge !== 'undefined' && vkBridge.supports("VKWebAppOpenUrl")) {
+            vkBridge.send("VKWebAppOpenUrl", { "url": apkUrl });
+        } else {
+            window.open(apkUrl, '_blank');
+        }
+    });
+
+    function showToast(text) {
+        const toast = document.getElementById('toast_container');
+        document.getElementById('toast_text').innerText = text;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function switchTab(t, index) {
+        const sections = ['rec', 'rate', 'reg', 'feed'];
+        const pill = document.getElementById('tab_pill');
+        pill.style.transform = `translateX(${index * 100}%)`;
+
+        sections.forEach((s) => {
+            document.getElementById('section_' + s).style.display = t === s ? 'block' : 'none';
+            document.getElementById('tab_' + s).classList.toggle('active', t === s);
+        });
+        if (t === 'rate') loadRating();
+    }
+
+    function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    function openSocialLink() {
+        window.open(`https://vk.com/public${currentGroupId}`, '_blank');
+    }
+
+    function showRoleDetail(id, title, desc) {
+        const img = document.getElementById('role_img');
+        img.src = `${GITHUB_IMG_BASE}role_${id}.jpg`;
+        document.getElementById('role_title').innerText = title;
+        document.getElementById('role_desc').innerText = desc;
+        openModal('modal_role_detail');
+    }
+
+    // ОФФЛАЙН ГЕНЕРАТОР ШТРИХКОДОВ И QR (БЕЗ API-СЕРВЕРОВ)
+    function showQR(id, name) {
+        const cleanId = (id || '').toString().replace(/^A/i, '');
+        const fullVerstCode = 'A' + cleanId;
+        const holder = document.getElementById('qr_canvas_holder');
+        holder.innerHTML = '';
+        
+        new QRCode(holder, {
+            text: fullVerstCode,
+            width: 200,
+            height: 200,
+            colorDark: "#2B326D",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        });
+
+        document.getElementById('qr_id_text').innerText = fullVerstCode;
+        document.getElementById('qr_name_text').innerText = (name || '').toUpperCase();
+        openModal('qr_modal');
+    }
+
+    function generateManualQR() {
+        const raw = document.getElementById('manual_qr_input').value.trim();
+        if (!raw) return showToast("Введите ID");
+        const clean = raw.replace(/^A/i, '');
+        const targetBox = document.getElementById('manual_qr_box');
+        targetBox.innerHTML = '';
+        
+        new QRCode(targetBox, {
+            text: 'A' + clean,
+            width: 200,
+            height: 200,
+            colorDark: "#2B326D",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        });
+        showToast("QR сгенерирован локально!");
+    }
+
+    function closeQR() { closeModal('qr_modal'); }
+
+    function setStoryMode(mode) {
+        storyMode = mode;
+        document.getElementById('story_mode_default').classList.toggle('active', mode === 'default');
+        document.getElementById('story_mode_custom').classList.toggle('active', mode === 'custom');
+        if (mode === 'custom') document.getElementById('story_photo_input').click();
+    }
+
+    function handleStoryPhotoSelect(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const img = new Image();
+                img.onload = function() { customStoryImage = img; showToast("Фотка загружена для сторис!"); };
+                img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function loadImage(url) {
+        return new Promise((resolve) => {
+            const img = new Image(); img.crossOrigin = "Anonymous";
+            img.onload = () => resolve(img); img.onerror = () => resolve(null); img.src = url;
+        });
+    }
+
+    async function shareToStory() {
+        showToast("Подготовка сторис...");
+        try {
+            await document.fonts.ready;
+            const canvas = document.createElement('canvas');
+            canvas.width = 1080; canvas.height = 1920;
+            const ctx = canvas.getContext('2d');
+
+            if (storyMode === 'custom' && customStoryImage) {
+                const scale = Math.max(1080 / customStoryImage.width, 1920 / customStoryImage.height);
+                const x = (1080 - customStoryImage.width * scale) / 2;
+                const y = (1920 - customStoryImage.height * scale) / 2;
+                ctx.drawImage(customStoryImage, x, y, customStoryImage.width * scale, customStoryImage.height * scale);
+                
+                const overlay = ctx.createLinearGradient(0, 0, 0, 1920);
+                overlay.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
+                overlay.addColorStop(0.4, 'rgba(0, 0, 0, 0.1)');
+                overlay.addColorStop(0.75, 'rgba(0, 0, 0, 0.2)');
+                overlay.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+                ctx.fillStyle = overlay; ctx.fillRect(0, 0, 1080, 1920);
+            } else {
+                const grad = ctx.createLinearGradient(0, 0, 0, 1920);
+                grad.addColorStop(0, '#2B326D'); grad.addColorStop(1, '#111536');
+                ctx.fillStyle = grad; ctx.fillRect(0, 0, 1080, 1920);
+            }
+
+            const logoImg = await loadImage(`${GITHUB_IMG_BASE}logo.png`);
+            if (logoImg) {
+                ctx.save(); ctx.beginPath(); ctx.arc(540, 240, 90, 0, Math.PI * 2, true); ctx.closePath(); ctx.clip();
+                ctx.drawImage(logoImg, 450, 150, 180, 180); ctx.restore();
+            }
+
+            const currentParkTitle = document.getElementById('park_name').innerText.replace(' ORG', '').trim();
+            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px "5verstFont", -apple-system, sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(currentParkTitle, 540, 390);
+
+            ctx.fillStyle = '#E6564C'; ctx.font = 'bold 44px "5verstFont", -apple-system, sans-serif';
+            ctx.fillText('Я в команде волонтёров! 🧡', 540, 1220);
+
+            if (selectedVolunteer) {
+                ctx.fillStyle = '#ffffff'; ctx.font = 'bold 62px "5verstFont", -apple-system, sans-serif';
+                ctx.fillText(selectedVolunteer.full_name, 540, 1310);
+            }
+
+            ctx.fillStyle = '#ffffff'; ctx.font = '32px "5verstFont", -apple-system, sans-serif';
+            ctx.fillText('Присоединяйся к нам в субботу в 09:00!', 540, 1680);
+
+            const dataUrl = canvas.toDataURL('image/png');
+
+            await vkBridge.send("VKWebAppShowStoryBox", {
+                background_type: "image", blob: dataUrl,
+                attachment: { text: "open", type: "url", url: window.location.href }
+            });
+        } catch(e) { showToast("Не удалось открыть сторис"); }
+    }
+
+    function getNextSaturday() {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = (day === 6) ? 0 : (6 - day);
+        d.setDate(d.getDate() + diff);
+        return d.toISOString().split('T')[0];
+    }
+
+    function formatDateDisplay(dateStr) {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    }
+
+    async function init() {
+        const nextSat = getNextSaturday();
+        document.getElementById('event_date_picker').value = nextSat;
+        document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
+
+        // Считываем group_id из параметров запуска ВК или URL
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlGroup = urlParams.get('vk_group_id') || urlParams.get('group_id');
+            if (urlGroup) currentGroupId = Number(urlGroup);
+            
+            const launchParams = await vkBridge.send("VKWebAppGetLaunchParams");
+            if (launchParams && launchParams.vk_group_id) {
+                currentGroupId = Number(launchParams.vk_group_id);
+            }
+        } catch(e) {}
+
+        try {
+            vkUser = await vkBridge.send("VKWebAppGetUserInfo");
+            
+            // Запрос проверки профиля и прав администратора на единый бэкенд
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&check_vk_id=${vkUser.id}`);
+            const data = await res.json();
+            
+            if (data.park_name) {
+                document.getElementById('park_name').innerText = data.park_name;
+                document.getElementById('about_title').innerText = data.park_name;
+            }
+
+            isAdmin = data.is_admin || false; 
+            if (isAdmin) {
+                document.getElementById('park_name').innerHTML += ' <span class="admin-badge">ORG</span>';
+            }
+
+            const themeRes = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&get_theme=1`);
+            const themeData = await themeRes.json();
+            document.getElementById('theme_input').value = themeData.theme || "";
+
+            if (data.found) {
+                selectedVolunteer = { id: data.verst_id, full_name: data.full_name };
+                document.getElementById('verst_search').value = data.full_name;
+                const welcome = document.getElementById('welcome_back');
+                welcome.style.display = 'block';
+                welcome.innerHTML = `👋 <b>${vkUser.first_name}</b>, профиль привязан!<br><button class="btn-qr" onclick="showQR('${data.verst_id}', '${data.full_name}')" style="margin-top:10px;">МОЯ КАРТОЧКА УЧАСТНИКА</button>`;
+            }
+            validateForm();
+        } catch (e) { console.error("Init Error:", e); }
+        loadQueue(); 
+    }
+    init();
+
+    function showSkeletons() {
+        const container = document.getElementById('queue_container');
+        container.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
+    }
+
+    function onDateChange() {
+        const selectedDate = document.getElementById('event_date_picker').value;
+        document.getElementById('event_date').innerText = formatDateDisplay(selectedDate);
+        loadQueue();
+    }
+
+    document.querySelectorAll('.role-option').forEach(item => {
+        item.onclick = function(e) {
+            const cb = this.querySelector('input');
+            if (e.target !== cb) cb.checked = !cb.checked;
+            this.classList.toggle('selected', cb.checked);
+            handleRoleChange();
+        };
+    });
+
+    function handleRoleChange() {
+        const checked = Array.from(document.querySelectorAll('.role-option input:checked')).map(i => i.parentElement.dataset.id);
+        const marshalCont = document.getElementById('marshal_container');
+        const paceCont = document.getElementById('pace_container');
+        const commentBox = document.getElementById('comment_container');
+        const silentBox = document.getElementById('silent_mode');
+        const silentLabel = document.getElementById('silent_label');
+
+        const keyRoles = ["1", "7", "11", "2", "15", "9", "13", "19"];
+        const hasKeyRole = checked.some(id => keyRoles.includes(id));
+
+        if (hasKeyRole) {
+            silentBox.checked = false; silentBox.disabled = true; silentLabel.classList.add('disabled');
+        } else {
+            silentBox.disabled = false; silentLabel.classList.remove('disabled');
+        }
+
+        marshalCont.style.display = checked.includes("7") ? 'block' : 'none';
+        paceCont.style.display = checked.includes("28") ? 'block' : 'none';
+        
+        const needsComment = checked.some(id => ["8", "9", "35", "1001", "1002", "1003"].includes(id));
+        if (needsComment || (checked.includes("7") && document.getElementById('marshal_select').value === 'custom') || (checked.includes("28") && document.getElementById('pace_select').value === 'custom')) {
+            commentBox.style.display = 'block';
+        } else {
+            commentBox.style.display = 'none';
+        }
+        validateForm();
+    }
+
+    async function saveTheme() {
+        const text = document.getElementById('theme_input').value;
+        await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: "set_theme", theme: text, group_id: currentGroupId }) 
+        });
+        showToast("Тема успешно сохранена!");
+    }
+
+    async function manualSync() {
+        const btn = document.getElementById('sync_btn');
+        btn.disabled = true; btn.innerText = "⌛ Синхронизируем...";
+        try {
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: "manual_sync", group_id: currentGroupId, target_date: document.getElementById('event_date_picker').value }) 
+            });
+            const data = await res.json();
+            if (data.offline) {
+                showToast("Сервера 5 вёрст пока лежат. Записи сохранены локально!");
+            } else if (data.success) { 
+                showToast("Синхронизация завершена!"); location.reload(); 
+            }
+        } catch(e) { showToast("Ошибка синхронизации"); }
+        btn.disabled = false; btn.innerText = "🔄 Синхронизировать с сайтом";
+    }
+
+    async function sendFeedback() {
+        const text = document.getElementById('feedback_input').value.trim();
+        if (!text) return showToast("Введите текст сообщения");
+        const btn = document.getElementById('feedback_btn');
+        btn.disabled = true; btn.innerText = "Отправка...";
+        
+        try {
+            await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: "add_admin_note", group_id: currentGroupId, vk_id: vkUser?.id || 0, name: (vkUser?.first_name || '') + " " + (vkUser?.last_name || ''), text: "[ОТЗЫВ] " + text }) 
+            });
+            showToast("Спасибо за отзыв!");
+            document.getElementById('feedback_input').value = "";
+        } catch(e) { showToast("Ошибка при отправке"); }
+        btn.disabled = false; btn.innerText = "Отправить";
+    }
+
+    function toggleFriendVk() {
+        const mode = document.getElementById('vk_id_mode').value;
+        const container = document.getElementById('friend_vk_container');
+        if (mode === 'friend') container.style.display = 'block';
+        else { container.style.display = 'none'; document.getElementById('selected_vk_id').value = ""; }
+        validateForm();
+    }
+
+    async function selectFriendFromVK() {
+        try {
+            const data = await vkBridge.send("VKWebAppGetFriends", { multi: false });
+            if (data.users && data.users.length > 0) {
+                const friend = data.users[0];
+                document.getElementById('selected_vk_id').value = friend.id;
+                document.getElementById('selected_vk_name').value = friend.first_name + " " + friend.last_name;
+                document.getElementById('selected_friend_photo').src = friend.photo_100;
+                document.getElementById('selected_friend_name').innerText = friend.first_name + " " + friend.last_name;
+                document.getElementById('selected_friend_id').innerText = "ID: " + friend.id;
+                document.getElementById('selected_friend_display').style.display = 'flex';
+                document.getElementById('choose_friend_btn').style.display = 'none';
+                validateForm();
+            }
+        } catch (e) {}
+    }
+
+    function selectAnotherFriend() {
+        document.getElementById('selected_friend_display').style.display = 'none';
+        document.getElementById('choose_friend_btn').style.display = 'block';
+        document.getElementById('selected_vk_id').value = "";
+        validateForm();
+    }
+
+    function handleMarshalSelect() { handleRoleChange(); }
+    function handlePaceSelect() { handleRoleChange(); }
+
+    async function searchHandler(query, resultBox, isRecord) {
+        if (query.length < 2) { resultBox.style.display = 'none'; return; }
+        resultBox.innerHTML = '<div style="padding:12px; color:#999; font-weight:600;">Ищем в NRMS...</div>';
+        resultBox.style.display = 'block';
+        try {
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&search=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            resultBox.innerHTML = '';
+            
+            const list = data.result?.data || [];
+            if (list.length === 0) {
+                const directDiv = document.createElement('div');
+                directDiv.style = "padding:12px 16px; cursor:pointer; background:rgba(230,86,76,0.1);";
+                directDiv.innerHTML = `<b style="color:var(--accent);">Использовать имя: "${query}"</b><br><small style="color:#666;">(Резервная запись без ID)</small>`;
+                directDiv.onclick = () => {
+                    selectedVolunteer = { id: "0", full_name: query };
+                    document.getElementById('verst_search').value = query;
+                    resultBox.style.display = 'none';
+                    validateForm();
+                };
+                resultBox.appendChild(directDiv);
+                return;
+            }
+
+            list.forEach(v => {
+                const div = document.createElement('div');
+                div.style = "padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05); cursor:pointer;";
+                div.innerHTML = `<b style="color:var(--primary); font-size:14px;">${v.full_name}</b><br><small style="color:#777; font-weight:600;">ID: ${v.id}</small>`;
+                div.onclick = async () => {
+                    if (isRecord) {
+                        selectedVolunteer = v;
+                        document.getElementById('verst_search').value = v.full_name;
+                        resultBox.style.display = 'none';
+                        validateForm();
+                    }
+                };
+                resultBox.appendChild(div);
+            });
+        } catch (e) {
+            resultBox.innerHTML = `<div style="padding:12px 16px; cursor:pointer;" onclick="setFallbackName('${query}')">
+                <b style="color:var(--primary);">Записать: "${query}"</b><br><small style="color:#999;">В резервный протокол</small>
+            </div>`;
+        }
+    }
+
+    function setFallbackName(name) {
+        selectedVolunteer = { id: "0", full_name: name };
+        document.getElementById('verst_search').value = name;
+        document.getElementById('search_results').style.display = 'none';
+        validateForm();
+    }
+
+    document.getElementById('verst_search').addEventListener('input', (e) => {
+        clearTimeout(window.searchTimeout);
+        const val = e.target.value.trim();
+        if (val.length >= 3 && !selectedVolunteer) {
+            selectedVolunteer = { id: "0", full_name: val };
+            validateForm();
+        }
+        window.searchTimeout = setTimeout(() => searchHandler(val, document.getElementById('search_results'), true), 400);
+    });
+
+    document.getElementById('rate_search').addEventListener('input', (e) => {
+        clearTimeout(window.rateTimeout);
+        window.rateTimeout = setTimeout(() => searchHandler(e.target.value.trim(), document.getElementById('rate_results'), false), 400);
+    });
+
+    function validateForm() {
+        const anyChecked = document.querySelectorAll('.role-option input:checked').length > 0;
+        const mode = document.getElementById('vk_id_mode').value;
+        const vkOk = (mode === 'me' || (mode === 'friend' && document.getElementById('selected_vk_id').value));
+        const hasName = selectedVolunteer || document.getElementById('verst_search').value.trim().length >= 3;
+        document.getElementById('submit_btn').disabled = !(hasName && anyChecked && vkOk);
+    }
+
+    async function sendData() {
+        const btn = document.getElementById('submit_btn');
+        btn.innerText = "Записываем..."; btn.disabled = true;
+
+        if (!selectedVolunteer) {
+            selectedVolunteer = { id: "0", full_name: document.getElementById('verst_search').value.trim() };
+        }
+
+        const roles = Array.from(document.querySelectorAll('.role-option input:checked')).map(cb => {
+            const item = cb.parentElement;
+            const rid = item.dataset.id;
+            let comment = document.getElementById('role_comment').value;
+            if (rid == "7") {
+                const m = document.getElementById('marshal_select').value;
+                comment = (m === 'custom' ? comment : m);
+            } else if (rid == "28") {
+                const p = document.getElementById('pace_select').value;
+                comment = (p === 'custom' ? comment : p);
+            }
+            return { id: rid, name: item.dataset.name, comment: comment };
+        });
+
+        const payload = {
+            group_id: currentGroupId,
+            verst_id: selectedVolunteer.id || "0",
+            full_name: selectedVolunteer.full_name,
+            roles: roles,
+            author_vk_id: vkUser?.id || "0",
+            target_vk_id: document.getElementById('vk_id_mode').value === 'me' ? (vkUser?.id || "0") : document.getElementById('selected_vk_id').value,
+            target_vk_name: document.getElementById('vk_id_mode').value === 'me' ? ((vkUser?.first_name || '') + " " + (vkUser?.last_name || '')) : document.getElementById('selected_vk_name').value,
+            silent: document.getElementById('silent_mode').checked,
+            target_date: document.getElementById('event_date_picker').value
+        };
+
+        try {
+            await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload) 
+            });
+            showToast("Записано в официальный протокол!");
+            setTimeout(() => location.reload(), 1000);
+        } catch(e) {
+            showToast("Ошибка при записи"); btn.disabled = false; btn.innerText = "Записаться";
+        }
+    }
+
+    async function loadRating() {
+        const container = document.getElementById('rating_list');
+        container.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
+        try {
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&get_rating=1`);
+            const data = await res.json();
+            data.sort((a,b) => ((b.runs||0) + (b.vols||0)) - ((a.runs||0) + (a.vols||0)));
+            container.innerHTML = '';
+            data.forEach((u, i) => {
+                const item = document.createElement('div');
+                item.className = 'rating-item';
+                const rBadge = u.run_club ? `<span class="badge ${u.run_club}">${runIcon} ${u.run_club.replace('run','')}</span>` : '';
+                const vBadge = u.vol_club ? `<span class="badge ${u.vol_club}">${volIcon} ${u.vol_club.replace('vol','')}</span>` : '';
+                item.innerHTML = `<div class="rank">${i+1}</div><div class="user-info"><div class="user-name">${u.name}</div><div class="stats-row">${rBadge} ${vBadge}</div></div>`;
+                container.appendChild(item);
+            });
+        } catch (e) { container.innerHTML = '<div style="padding:15px; text-align:center; color:#999;">Ошибка загрузки рейтинга</div>'; }
+    }
+
+    async function loadQueue() {
+        showSkeletons();
+        const selectedDate = document.getElementById('event_date_picker').value;
+        try {
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&date=${selectedDate}`);
+            const data = await res.json();
+            const container = document.getElementById('queue_container');
+            container.innerHTML = '';
+            if(!data || data.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#777; font-weight:600; padding:20px; font-size:14px; background:rgba(255,255,255,0.4); border-radius:16px;">На эту дату пока никто не записался 😢</div>';
+                return;
+            }
+            data.reverse().forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'vol-card';
+                
+                const isMine = vkUser && (item.author_vk_id == vkUser.id || item.vk_id == vkUser.id);
+                const canDelete = isMine || isAdmin;
+                
+                div.innerHTML = `
+                    <div class="vol-info-group">
+                        <span class="vol-name-txt">${item.full_name} ${item.comment ? '<span style="color:#666;font-weight:500;">('+item.comment+')</span>' : ''}</span>
+                        <span class="vol-role-badge">${item.role_name}</span>
+                    </div>
+                    ${canDelete ? `<button class="btn-delete" onclick="deleteMyRole('${item.role_id}', '${item.role_name}', '${item.full_name}', '${item.verst_id}', this)">Отмена</button>` : ''}
+                `;
+                container.appendChild(div);
+            });
+        } catch(e) {
+            document.getElementById('queue_container').innerHTML = '<div style="text-align:center; color:#e6564c; padding:20px; font-size:13px;">Ошибка прогрузки списка</div>';
+        }
+    }
+
+    async function deleteMyRole(rid, rname, fname, verst_id, btnElement) {
+        if (btnElement && !btnElement.dataset.confirming) {
+            btnElement.dataset.confirming = "true";
+            btnElement.innerText = "Точно?";
+            btnElement.style.background = "#E6564C";
+            btnElement.style.color = "#ffffff";
+            
+            setTimeout(() => {
+                if (btnElement) {
+                    delete btnElement.dataset.confirming;
+                    btnElement.innerText = "Отмена";
+                    btnElement.style.background = "rgba(255,255,255,0.7)";
+                    btnElement.style.color = "#E6564C";
+                }
+            }, 3000);
+            return;
+        }
+
+        if (btnElement) { btnElement.disabled = true; btnElement.innerText = "⌛..."; }
+
+        try {
+            await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: "delete", 
+                    group_id: currentGroupId,
+                    requestor_vk: vkUser ? vkUser.id : "0", 
+                    verst_id: verst_id,
+                    role_id: rid, 
+                    role_name: rname, 
+                    person_name: fname,
+                    target_date: document.getElementById('event_date_picker').value
+                }) 
+            });
+            showToast("Запись отменена");
+            setTimeout(() => location.reload(), 800);
+        } catch (e) {
+            showToast("Ошибка отмены");
+            if (btnElement) { btnElement.disabled = false; btnElement.innerText = "Отмена"; }
+        }
+    }
+
+    function updateTimer() {
+        const timerBox = document.getElementById('countdown_timer');
+        const td = document.getElementById('t_d'); const th = document.getElementById('t_h');
+        const tm = document.getElementById('t_m'); const ts = document.getElementById('t_s');
+        
+        function tick() {
+            const now = new Date(); let target = new Date();
+            target.setDate(now.getDate() + (6 - now.getDay() + 7) % 7); target.setHours(9, 0, 0, 0);
+
+            if (now.getDay() === 6 && now.getHours() >= 9 && (now.getHours() < 10 || (now.getHours() === 10 && now.getMinutes() < 30))) {
+                timerBox.style.display = 'flex';
+                timerBox.innerHTML = "<div style='color:var(--accent); font-weight:900; font-size:15px; text-transform:uppercase;'>🏃‍♂️ СТАРТ ИДЕТ ПРЯМО СЕЙЧАС!</div>";
+                return;
+            }
+
+            if (now > target || (now.getDay() === 6 && now.getHours() >= 10)) target.setDate(target.getDate() + 7);
+
+            const diff = target - now;
+            td.innerText = Math.floor(diff / (1000 * 60 * 60 * 24)).toString().padStart(2, '0');
+            th.innerText = Math.floor((diff / (1000 * 60 * 60)) % 24).toString().padStart(2, '0');
+            tm.innerText = Math.floor((diff / (1000 * 60)) % 60).toString().padStart(2, '0');
+            ts.innerText = Math.floor((diff / 1000) % 60).toString().padStart(2, '0');
+            timerBox.style.display = 'flex';
+        }
+        tick(); setInterval(tick, 1000);
+    }
+    updateTimer();
+</script>
+</body>
+</html>
