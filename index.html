@@ -328,9 +328,6 @@
         .story-mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; justify-content: center; }
         .story-mode-btn { font-size: 12px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.6); cursor: pointer; font-weight: 700; transition: all 0.2s; }
         .story-mode-btn.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 10px rgba(43,50,109,0.3); }
-        .admin-badge {
-            display: inline-block; background: linear-gradient(135deg, #FFD700, #FDB931); color: #4a3600; font-size: 10px; padding: 2px 6px; border-radius: 6px; font-weight: 900; margin-left: 8px; vertical-align: middle; box-shadow: 0 2px 4px rgba(255, 215, 0, 0.4);
-        }
     </style>
 </head>
 <body>
@@ -693,6 +690,14 @@
     let isAdmin = false;
     let currentGroupId = 228375526; // Числовое значение без знака минус
 
+    // Восстанавливаем ранее выбранного участника из LocalStorage
+    try {
+        const savedVol = localStorage.getItem('last_selected_volunteer');
+        if (savedVol) {
+            selectedVolunteer = JSON.parse(savedVol);
+        }
+    } catch(e) {}
+
     const runIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M13.49 5.42c1.23 0 2.22-1 2.22-2.22A2.22 2.22 0 0 0 13.5 1a2.22 2.22 0 0 0-2.23 2.22c0 1.22.99 2.2 2.22 2.2M10.34 11l-2.1-1.03c-.34-.17-.55-.52-.55-.91 0-.74.79-1.22 1.45-.91l4.83 2.3c.53.25.87.78.87 1.37V17h-2v-4.43l-1.74-.83V23h-2v-6.95l.45-1.5L7.2 13c-.34-.16-.55-.52-.55-.9 0-.75.8-1.23 1.46-.9l2.23 1.03V11z'/%3E%3C/svg%3E" />`;
     const volIcon = "🧡 ";
 
@@ -877,53 +882,60 @@
     }
 
     async function init() {
-    const nextSat = getNextSaturday();
-    document.getElementById('event_date_picker').value = nextSat;
-    document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
+        const nextSat = getNextSaturday();
+        document.getElementById('event_date_picker').value = nextSat;
+        document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
 
-    // 1. Извлечение group_id из всех возможных источников ВК
-    try {
-        const urlParams = new URLSearchParams(window.location.search);
-        let rawParam = urlParams.get('vk_group_id') || urlParams.get('group_id');
+        // Восстановление выбранного волонтера в поле
+        if (selectedVolunteer) {
+            document.getElementById('verst_search').value = `${selectedVolunteer.full_name} (A${(selectedVolunteer.id||'').toString().replace(/^A/i,'')})`;
+        }
 
-        // Проверка хэша ссылки (vk.ru/app54835513#-228375526)
-        if (!rawParam && window.location.hash) {
-            const hashClean = window.location.hash.replace('#', '').trim();
-            if (/^-?\d+$/.test(hashClean)) {
-                rawParam = hashClean;
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            let rawParam = urlParams.get('vk_group_id') || urlParams.get('group_id');
+
+            if (!rawParam && window.location.hash) {
+                const hashClean = window.location.hash.replace('#', '').trim();
+                if (/^-?\d+$/.test(hashClean)) {
+                    rawParam = hashClean;
+                }
             }
-        }
 
-        if (rawParam) {
-            currentGroupId = Math.abs(parseInt(rawParam, 10));
-        }
+            if (rawParam) {
+                currentGroupId = Math.abs(parseInt(rawParam, 10));
+            }
 
-        const launchParams = await vkBridge.send("VKWebAppGetLaunchParams");
-        if (launchParams && launchParams.vk_group_id) {
-            currentGroupId = Math.abs(parseInt(launchParams.vk_group_id, 10));
-        }
-    } catch(e) {}
+            const launchParams = await vkBridge.send("VKWebAppGetLaunchParams");
+            if (launchParams && launchParams.vk_group_id) {
+                currentGroupId = Math.abs(parseInt(launchParams.vk_group_id, 10));
+            }
+        } catch(e) {}
 
-    try {
-        vkUser = await vkBridge.send("VKWebAppGetUserInfo");
+        try {
+            vkUser = await vkBridge.send("VKWebAppGetUserInfo");
+        } catch(e) {}
+
+        try {
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.not_configured) {
+                    openModal('modal_onboarding');
+                    return;
+                }
+                if (data.park_name) {
+                    document.getElementById('park_name').innerText = data.park_name;
+                    document.getElementById('about_title').innerText = data.park_name;
+                }
+            } else {
+                document.getElementById('park_name').innerText = "5 вёрст Станкозавод | Нижний Новгород";
+            }
+        } catch (e) {
+            document.getElementById('park_name').innerText = "5 вёрст Станкозавод | Нижний Новгород";
+        }
         
-        const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`);
-        const data = await res.json();
-        
-        if (data.not_configured) {
-            openModal('modal_onboarding');
-            return;
-        }
-
-        if (data.park_name) {
-            document.getElementById('park_name').innerText = data.park_name;
-            document.getElementById('about_title').innerText = data.park_name;
-        }
-
         validateForm();
-    } catch (e) { 
-        console.error("Init Error:", e); 
-    }
         loadQueue();
     }
     init();
@@ -1163,7 +1175,7 @@
     function handlePaceSelect() { handleRoleChange(); }
 
     // =========================================================================
-    // СТРОГИЙ ПОИСК В NRMS (БЕЗ РЕЗЕРВНЫХ ИМЕН)
+    // СТРОГИЙ ПОИСК В NRMS
     // =========================================================================
     async function searchHandler(query, resultBox, isRecord) {
         if (query.length < 2) { 
@@ -1197,6 +1209,7 @@
                 div.onclick = async () => {
                     if (isRecord) {
                         selectedVolunteer = v;
+                        try { localStorage.setItem('last_selected_volunteer', JSON.stringify(v)); } catch(e) {}
                         document.getElementById('verst_search').value = `${v.full_name} (A${(v.id||'').toString().replace(/^A/i,'')})`;
                         resultBox.style.display = 'none';
                         validateForm();
@@ -1213,9 +1226,9 @@
         clearTimeout(window.searchTimeout);
         const val = e.target.value.trim();
         
-        // Сброс выбора при ручном изменении
         if (!val) {
             selectedVolunteer = null;
+            try { localStorage.removeItem('last_selected_volunteer'); } catch(e) {}
             validateForm();
             document.getElementById('search_results').style.display = 'none';
             return;
@@ -1334,7 +1347,10 @@
                 const div = document.createElement('div');
                 div.className = 'vol-card';
                 
-                const isMine = vkUser && (item.author_vk_id == vkUser.id || item.vk_id == vkUser.id);
+                // Проверяем возможность отмены по verst_id или VK
+                const currentVerstClean = selectedVolunteer ? (selectedVolunteer.id || '').toString().replace(/^A/i, '') : '';
+                const itemVerstClean = (item.verst_id || '').toString().replace(/^A/i, '');
+                const isMine = (currentVerstClean && currentVerstClean === itemVerstClean);
                 const canDelete = isMine || isAdmin;
                 
                 div.innerHTML = `
