@@ -1,0 +1,20 @@
+{
+  "228375526": {
+    "park_id": 10061,
+    "slug": "stankozavod",
+    "name": "5 вёрст Станкозавод | Нижний Новгород",
+    "vk_token": "vk1_token_stankozavod",
+    "chat_ids": ["2000000001"],
+    "nrms_user": "A790217375",
+    "nrms_pass": "Cryp1307_mk"
+  },
+  "231094435": {
+    "park_id": 10079,
+    "slug": "kstovo",
+    "name": "5 вёрст Кстово Юбилейный",
+    "vk_token": "vk1_token_kstovo",
+    "chat_ids": ["2000000001", "2000000002", "20000000263", "-231155212"],
+    "nrms_user": "A790217375",
+    "nrms_pass": "Cryp1307_mk"
+  }
+}
