@@ -104,7 +104,7 @@ function formatNrmsDate(dateStr) {
 function mapRoleForNrms(roleId) {
   const id = Number(roleId);
   if ([1001, 1002, 1003, 1007].includes(id)) return 8; // Чай, Вкусняшки, Вода, Диджей -> Подготовка
-  if ([1004, 1005, 1006].includes(id)) return 10;     // Оратор, Поддержка, Оркестр -> Разное[cite: 4, 5]
+  if ([1004, 1005, 1006].includes(id)) return 10;     // Оратор, Поддержка, Оркестр -> Разное
   return id;
 }
 
@@ -309,9 +309,6 @@ async function handleAppGet(url, park) {
   });
 }
 
-/**
- * ФОРМИРОВАНИЕ ПОЛНОГО КРАСИВОГО СПИСКА РОСТЕРА
- */
 function buildRosterMessage(lastEntryHeader, allVolunteers, targetDate, parkGroupId) {
   const rosterTemplate = [
     { id: 1, label: "Организатор", count: 1 },
@@ -333,14 +330,14 @@ function buildRosterMessage(lastEntryHeader, allVolunteers, targetDate, parkGrou
     { id: 1007, label: "Диджей", count: 1 },
     { id: 5, label: "Фотограф", count: 1 },
     { id: 38, label: "Видеограф", count: 1 }
-  ];[cite: 4, 5]
+  ];
 
   let msg = "";
   if (lastEntryHeader) {
-    msg += `⚡️ ${lastEntryHeader}\n————————————————\n\n`;[cite: 4, 5]
+    msg += `⚡️ ${lastEntryHeader}\n————————————————\n\n`;
   }
 
-  msg += `📋 Список на ${targetDate}\n\n`;[cite: 4, 5]
+  msg += `📋 Список на ${targetDate}\n\n`;
 
   const usedVolunteers = new Set();
 
@@ -349,37 +346,34 @@ function buildRosterMessage(lastEntryHeader, allVolunteers, targetDate, parkGrou
     allVolunteers.forEach((v, idx) => {
       const vRoleId = Number(v.role_id);
       if (vRoleId === item.id && !usedVolunteers.has(idx)) {
-        const comment = v.comment ? ` (${v.comment})` : "";[cite: 4, 5]
-        msg += `⭐ ${item.label}${comment} — ${v.full_name}\n`;[cite: 4, 5]
+        const comment = v.comment ? ` (${v.comment})` : "";
+        msg += `⭐ ${item.label}${comment} — ${v.full_name}\n`;
         usedVolunteers.add(idx);
         slotsFound++;
       }
     });
 
     for (let j = slotsFound; j < item.count; j++) {
-      msg += `➖ ${item.label} — \n`;[cite: 4, 5]
+      msg += `➖ ${item.label} — \n`;
     }
   });
 
   let extra = "";
   allVolunteers.forEach((v, idx) => {
     if (!usedVolunteers.has(idx)) {
-      const comment = v.comment ? ` (${v.comment})` : "";[cite: 4, 5]
-      extra += `⭐ ${v.role_name || 'Волонтёр'}${comment} — ${v.full_name}\n`;[cite: 4, 5]
+      const comment = v.comment ? ` (${v.comment})` : "";
+      extra += `⭐ ${v.role_name || 'Волонтёр'}${comment} — ${v.full_name}\n`;
     }
   });
 
   if (extra) {
-    msg += `\n➕ Дополнительно:\n${extra}`;[cite: 4, 5]
+    msg += `\n➕ Дополнительно:\n${extra}`;
   }
 
-  msg += `\n📝 Записаться: vk.ru/app54835513#-${parkGroupId}`;[cite: 4, 5]
+  msg += `\n📝 Записаться: vk.ru/app54835513#-${parkGroupId}`;
   return msg;
 }
 
-/**
- * ЗАПИСЬ ВОЛОНТЕРА С ГЕНЕРАЦИЕЙ ПОЛНОГО РОСТЕРА В ЧАТ
- */
 async function handleAppAction(body, park) {
   const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
   if (!token) {
@@ -393,7 +387,6 @@ async function handleAppAction(body, park) {
     const verstIdNum = Number(body.verst_id.toString().replace(/^A/i, ''));
     const nrmsFormattedDate = formatNrmsDate(body.target_date);
 
-    // 1. Получаем текущий ростер
     let currentVolunteers = [];
     try {
       const getRes = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
@@ -405,7 +398,6 @@ async function handleAppAction(body, park) {
       currentVolunteers = getData.result?.volunteer_list || [];
     } catch(e) {}
 
-    // 2. Объединяем списки
     const fullVolunteersList = [];
     const volMap = new Map();
 
@@ -413,7 +405,7 @@ async function handleAppAction(body, park) {
       const vId = Number(v.verst_id || v.id);
       const rId = Number(v.role_id);
       if (vId && rId) {
-        volMap.set(`${vId}_${mapRoleForNrms(rId)}`, { verst_id: vId, role_id: mapRoleForNrms(rId) });[cite: 4, 5]
+        volMap.set(`${vId}_${mapRoleForNrms(rId)}`, { verst_id: vId, role_id: mapRoleForNrms(rId) });
         fullVolunteersList.push({
           verst_id: vId,
           role_id: rId,
@@ -436,7 +428,6 @@ async function handleAppAction(body, park) {
       });
     });
 
-    // 3. Сохраняем в NRMS
     const savePayload = {
       event_id: park.park_id,
       date: nrmsFormattedDate,
@@ -451,14 +442,13 @@ async function handleAppAction(body, park) {
       body: JSON.stringify(savePayload)
     });
 
-    // 4. Отправляем полный ростер в чат ВК
     if (!(body.silent === true || body.silent === "true")) {
       const roleNames = body.roles.map(r => r.name).join(', ');
       const userMention = (body.target_vk_id && body.target_vk_id !== "0") 
         ? `[id${body.target_vk_id}|${body.full_name}]` 
         : body.full_name;
 
-      const header = `Новая запись: ${userMention} — ${roleNames}`;[cite: 4, 5]
+      const header = `Новая запись: ${userMention} — ${roleNames}`;
       const msg = buildRosterMessage(header, fullVolunteersList, nrmsFormattedDate, park.vk_group_id);
 
       const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
@@ -473,9 +463,6 @@ async function handleAppAction(body, park) {
   });
 }
 
-/**
- * УДАЛЕНИЕ С ОТПРАВКОЙ ОБНОВЛЕННОГО РОСТЕРА В ЧАТ
- */
 async function handleDeleteAction(body, park) {
   const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
   if (!token) {
@@ -507,7 +494,7 @@ async function handleDeleteAction(body, park) {
     const vId = Number(v.verst_id || v.id);
     const rId = Number(v.role_id);
     if (!(vId === verstIdNum && mapRoleForNrms(rId) === roleIdNum)) {
-      updatedVolunteers.push({ verst_id: vId, role_id: mapRoleForNrms(rId) });[cite: 4, 5]
+      updatedVolunteers.push({ verst_id: vId, role_id: mapRoleForNrms(rId) });
       updatedDisplayList.push({
         verst_id: vId,
         role_id: rId,
@@ -530,7 +517,7 @@ async function handleDeleteAction(body, park) {
     })
   });
 
-  const header = `❌ Отмена записи: ${body.person_name || 'Волонтёр'} снят(а) с позиции «${body.role_name || 'Волонтёр'}»`;[cite: 4, 5]
+  const header = `❌ Отмена записи: ${body.person_name || 'Волонтёр'} снят(а) с позиции «${body.role_name || 'Волонтёр'}»`;
   const msg = buildRosterMessage(header, updatedDisplayList, nrmsFormattedDate, park.vk_group_id);
 
   const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
