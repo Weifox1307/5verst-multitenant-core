@@ -104,7 +104,7 @@ function formatNrmsDate(dateStr) {
 function mapRoleForNrms(roleId) {
   const id = Number(roleId);
   if ([1001, 1002, 1003, 1007].includes(id)) return 8; // Чай, Вкусняшки, Вода, Диджей -> Подготовка
-  if ([1004, 1005, 1006].includes(id)) return 10;     // Оратор, Поддержка, Оркестр -> Разное
+  if ([1004, 1005, 1006].includes(id)) return 10;     // Оратор, Поддержка, Оркестр -> Разное[cite: 4, 5]
   return id;
 }
 
@@ -310,7 +310,75 @@ async function handleAppGet(url, park) {
 }
 
 /**
- * ЗАПИСЬ ВОЛОНТЕРА: ВЫТЯГИВАЕТ ТЕКУЩИЙ РОСТЕР, ОБЪЕДИНЯЕТ И СОХРАНЯЕТ
+ * ФОРМИРОВАНИЕ ПОЛНОГО КРАСИВОГО СПИСКА РОСТЕРА
+ */
+function buildRosterMessage(lastEntryHeader, allVolunteers, targetDate, parkGroupId) {
+  const rosterTemplate = [
+    { id: 1, label: "Организатор", count: 1 },
+    { id: 35, label: "Разметка трассы", count: 1 },
+    { id: 15, label: "Инструктаж новых участников", count: 1 },
+    { id: 2, label: "Секундомер", count: 2 },
+    { id: 13, label: "Карточки позиций", count: 1 },
+    { id: 11, label: "Сканер", count: 1 },
+    { id: 19, label: "Замыкающий", count: 1 },
+    { id: 7, label: "Маршал", count: 3 },
+    { id: 31, label: "Проведение разминки", count: 1 },
+    { id: 8, label: "Подготовка мероприятия", count: 1 },
+    { id: 1001, label: "Чай", count: 1 },
+    { id: 1002, label: "Вкусняшки", count: 1 },
+    { id: 1003, label: "Вода", count: 1 },
+    { id: 1004, label: "Оратор", count: 1 },
+    { id: 1005, label: "Поддержка на трассе", count: 1 },
+    { id: 1006, label: "Человек Оркестр", count: 1 },
+    { id: 1007, label: "Диджей", count: 1 },
+    { id: 5, label: "Фотограф", count: 1 },
+    { id: 38, label: "Видеограф", count: 1 }
+  ];[cite: 4, 5]
+
+  let msg = "";
+  if (lastEntryHeader) {
+    msg += `⚡️ ${lastEntryHeader}\n————————————————\n\n`;[cite: 4, 5]
+  }
+
+  msg += `📋 Список на ${targetDate}\n\n`;[cite: 4, 5]
+
+  const usedVolunteers = new Set();
+
+  rosterTemplate.forEach(item => {
+    let slotsFound = 0;
+    allVolunteers.forEach((v, idx) => {
+      const vRoleId = Number(v.role_id);
+      if (vRoleId === item.id && !usedVolunteers.has(idx)) {
+        const comment = v.comment ? ` (${v.comment})` : "";[cite: 4, 5]
+        msg += `⭐ ${item.label}${comment} — ${v.full_name}\n`;[cite: 4, 5]
+        usedVolunteers.add(idx);
+        slotsFound++;
+      }
+    });
+
+    for (let j = slotsFound; j < item.count; j++) {
+      msg += `➖ ${item.label} — \n`;[cite: 4, 5]
+    }
+  });
+
+  let extra = "";
+  allVolunteers.forEach((v, idx) => {
+    if (!usedVolunteers.has(idx)) {
+      const comment = v.comment ? ` (${v.comment})` : "";[cite: 4, 5]
+      extra += `⭐ ${v.role_name || 'Волонтёр'}${comment} — ${v.full_name}\n`;[cite: 4, 5]
+    }
+  });
+
+  if (extra) {
+    msg += `\n➕ Дополнительно:\n${extra}`;[cite: 4, 5]
+  }
+
+  msg += `\n📝 Записаться: vk.ru/app54835513#-${parkGroupId}`;[cite: 4, 5]
+  return msg;
+}
+
+/**
+ * ЗАПИСЬ ВОЛОНТЕРА С ГЕНЕРАЦИЕЙ ПОЛНОГО РОСТЕРА В ЧАТ
  */
 async function handleAppAction(body, park) {
   const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
@@ -325,7 +393,7 @@ async function handleAppAction(body, park) {
     const verstIdNum = Number(body.verst_id.toString().replace(/^A/i, ''));
     const nrmsFormattedDate = formatNrmsDate(body.target_date);
 
-    // 1. Получаем текущий состав волонтеров из NRMS
+    // 1. Получаем текущий ростер
     let currentVolunteers = [];
     try {
       const getRes = await fetch('https://nrms.5verst.ru/api/v1/event/volunteer/list', {
@@ -337,23 +405,38 @@ async function handleAppAction(body, park) {
       currentVolunteers = getData.result?.volunteer_list || [];
     } catch(e) {}
 
-    // 2. Создаем объединенную мапу
+    // 2. Объединяем списки
+    const fullVolunteersList = [];
     const volMap = new Map();
+
     currentVolunteers.forEach(v => {
       const vId = Number(v.verst_id || v.id);
-      const rId = mapRoleForNrms(v.role_id);
+      const rId = Number(v.role_id);
       if (vId && rId) {
-        volMap.set(`${vId}_${rId}`, { verst_id: vId, role_id: rId });
+        volMap.set(`${vId}_${mapRoleForNrms(rId)}`, { verst_id: vId, role_id: mapRoleForNrms(rId) });[cite: 4, 5]
+        fullVolunteersList.push({
+          verst_id: vId,
+          role_id: rId,
+          role_name: v.role_name || 'Волонтёр',
+          full_name: v.full_name || v.name,
+          comment: v.comment || ''
+        });
       }
     });
 
-    // 3. Добавляем новые роли
     body.roles.forEach(r => {
       const mappedRole = mapRoleForNrms(r.id);
       volMap.set(`${verstIdNum}_${mappedRole}`, { verst_id: verstIdNum, role_id: mappedRole });
+      fullVolunteersList.push({
+        verst_id: verstIdNum,
+        role_id: Number(r.id),
+        role_name: r.name,
+        full_name: body.full_name,
+        comment: r.comment || ''
+      });
     });
 
-    // 4. Отправляем полный объединенный список обратно в NRMS
+    // 3. Сохраняем в NRMS
     const savePayload = {
       event_id: park.park_id,
       date: nrmsFormattedDate,
@@ -368,15 +451,16 @@ async function handleAppAction(body, park) {
       body: JSON.stringify(savePayload)
     });
 
-    // 5. Уведомление в беседу ВК
+    // 4. Отправляем полный ростер в чат ВК
     if (!(body.silent === true || body.silent === "true")) {
       const roleNames = body.roles.map(r => r.name).join(', ');
       const userMention = (body.target_vk_id && body.target_vk_id !== "0") 
         ? `[id${body.target_vk_id}|${body.full_name}]` 
         : body.full_name;
 
-      const msg = `⚡️ Новая запись в парке ${park.name}:\n${userMention} — ${roleNames} 🧡\n📅 Дата: ${nrmsFormattedDate}`;
-      
+      const header = `Новая запись: ${userMention} — ${roleNames}`;[cite: 4, 5]
+      const msg = buildRosterMessage(header, fullVolunteersList, nrmsFormattedDate, park.vk_group_id);
+
       const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
       for (const chatId of chatIds) {
         await sendVkMessage(park.vk_access_token, chatId, msg);
@@ -390,7 +474,7 @@ async function handleAppAction(body, park) {
 }
 
 /**
- * УДАЛЕНИЕ ВОЛОНТЕРА ИЗ РОСТЕРА NRMS
+ * УДАЛЕНИЕ С ОТПРАВКОЙ ОБНОВЛЕННОГО РОСТЕРА В ЧАТ
  */
 async function handleDeleteAction(body, park) {
   const token = await getNrmsToken(park.nrms_user, park.nrms_pass_encrypted);
@@ -416,12 +500,23 @@ async function handleDeleteAction(body, park) {
     currentVolunteers = getData.result?.volunteer_list || [];
   } catch(e) {}
 
-  const updatedVolunteers = currentVolunteers
-    .filter(v => !(Number(v.verst_id || v.id) === verstIdNum && mapRoleForNrms(v.role_id) === roleIdNum))
-    .map(v => ({
-      verst_id: Number(v.verst_id || v.id),
-      role_id: mapRoleForNrms(v.role_id)
-    }));
+  const updatedVolunteers = [];
+  const updatedDisplayList = [];
+
+  currentVolunteers.forEach(v => {
+    const vId = Number(v.verst_id || v.id);
+    const rId = Number(v.role_id);
+    if (!(vId === verstIdNum && mapRoleForNrms(rId) === roleIdNum)) {
+      updatedVolunteers.push({ verst_id: vId, role_id: mapRoleForNrms(rId) });[cite: 4, 5]
+      updatedDisplayList.push({
+        verst_id: vId,
+        role_id: rId,
+        role_name: v.role_name || 'Волонтёр',
+        full_name: v.full_name || v.name,
+        comment: v.comment || ''
+      });
+    }
+  });
 
   await fetch('https://nrms.5verst.ru/api/v1/volunteer/event/save', {
     method: 'POST',
@@ -435,7 +530,9 @@ async function handleDeleteAction(body, park) {
     })
   });
 
-  const msg = `❌ Отмена записи:\n${body.person_name || 'Волонтёр'} снят(а) с позиции «${body.role_name || 'Волонтёр'}»\n📅 Дата: ${nrmsFormattedDate}`;
+  const header = `❌ Отмена записи: ${body.person_name || 'Волонтёр'} снят(а) с позиции «${body.role_name || 'Волонтёр'}»`;[cite: 4, 5]
+  const msg = buildRosterMessage(header, updatedDisplayList, nrmsFormattedDate, park.vk_group_id);
+
   const chatIds = Array.isArray(park.chat_ids) ? park.chat_ids : JSON.parse(park.chat_ids || '[]');
   for (const chatId of chatIds) {
     await sendVkMessage(park.vk_access_token, chatId, msg);
