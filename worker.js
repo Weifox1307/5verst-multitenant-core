@@ -96,7 +96,8 @@ export default {
  * REST запрос к Supabase без npm пакетов
  */
 async function getParkConfigFromDB(env, groupId) {
-  const endpoint = `${env.SUPABASE_URL}/rest/v1/parks?vk_group_id=eq.${groupId}&is_active=eq.true&select=*`;
+  const cleanId = Math.abs(Number(groupId));
+  const endpoint = `${env.SUPABASE_URL}/rest/v1/parks?vk_group_id=eq.${cleanId}&is_active=eq.true&select=*`;
   
   const response = await fetch(endpoint, {
     headers: {
