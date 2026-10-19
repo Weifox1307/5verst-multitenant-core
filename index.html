@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>5 вёрст | Единая платформа волонтёров</title>
     <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-    <!-- Локальный оффлайн генератор QR без обращений к сторонним серверам -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         @font-face {
@@ -24,7 +23,6 @@
             --text-dark: #111;
             --text-muted: #555;
             
-            /* Glassmorphism Variables */
             --glass-bg: rgba(255, 255, 255, 0.45);
             --glass-border: rgba(255, 255, 255, 0.6);
             --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
@@ -272,13 +270,14 @@
 
         .modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.3); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
             z-index: 2000; align-items: center; justify-content: center; flex-direction: column; padding: 20px;
         }
         .modal-content {
-            background: rgba(255, 255, 255, 0.85) !important; padding: 24px; border-radius: 28px;
-            width: 100%; max-width: 340px; box-shadow: 0 25px 50px rgba(0,0,0,0.2);
+            background: rgba(255, 255, 255, 0.92) !important; padding: 24px; border-radius: 28px;
+            width: 100%; max-width: 360px; box-shadow: 0 25px 50px rgba(0,0,0,0.25);
             color: var(--text-dark); text-align: center; border: 1px solid rgba(255,255,255,0.9); backdrop-filter: blur(20px);
+            max-height: 85vh; overflow-y: auto;
         }
 
         .close-modal { margin-top: 20px; color: white; font-weight: 700; cursor: pointer; font-size: 15px; opacity: 0.9; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius:20px; backdrop-filter: blur(5px); }
@@ -332,9 +331,6 @@
         .admin-badge {
             display: inline-block; background: linear-gradient(135deg, #FFD700, #FDB931); color: #4a3600; font-size: 10px; padding: 2px 6px; border-radius: 6px; font-weight: 900; margin-left: 8px; vertical-align: middle; box-shadow: 0 2px 4px rgba(255, 215, 0, 0.4);
         }
-        .backup-badge {
-            display: inline-block; background: #34c759; color: white; font-size: 10px; padding: 2px 8px; border-radius: 6px; font-weight: 800; margin-left: 6px;
-        }
     </style>
 </head>
 <body>
@@ -345,6 +341,39 @@
 <div id="toast_container">💬 <span id="toast_text"></span></div>
 
 <div class="fab-help" onclick="openModal('modal_help')">?</div>
+
+<!-- МОДАЛЬНОЕ ОКНО ОНБОРДИНГА ДЛЯ ПОДКЛЮЧЕНИЯ НОВОГО ПАРКА -->
+<div id="modal_onboarding" class="modal">
+    <div class="modal-content" style="text-align:left;">
+        <h2 style="color:var(--primary); margin:0 0 8px 0; justify-content:center;">Подключение парка</h2>
+        <p style="font-size:12px; color:#555; line-height:1.4; margin-bottom:14px; text-align:center;">
+            Эта группа ВК еще не привязана к 5 вёрст. Войдите под учетной записью организатора.
+        </p>
+
+        <div id="onboard_step_1">
+            <label>Логин организатора в NRMS (с буквой A):</label>
+            <input type="text" id="ob_user" placeholder="Например: A790217375" autocomplete="off">
+
+            <label>Пароль от сайта 5 вёрст (NRMS):</label>
+            <input type="password" id="ob_pass" placeholder="••••••••" autocomplete="off">
+
+            <button type="button" class="btn-qr" id="ob_check_btn" onclick="checkNrmsLogin()">Проверить доступы</button>
+        </div>
+
+        <div id="onboard_step_2" style="display:none; margin-top:10px;">
+            <label>Выберите локацию для этой группы ВК:</label>
+            <select id="ob_park_select"></select>
+
+            <label>Токен сообщества ВКонтакте:</label>
+            <input type="text" id="ob_vk_token" placeholder="vk1.a.xxxx..." autocomplete="off">
+            <small style="color:#777; font-size:11px; display:block; margin:-10px 0 16px 4px;">
+                Управление $\rightarrow$ Работа с API $\rightarrow$ Создать ключ с правами на сообщения.
+            </small>
+
+            <button type="button" class="btn-sync" id="ob_save_btn" onclick="submitParkRegistration()">Привязать парк к группе</button>
+        </div>
+    </div>
+</div>
 
 <div id="modal_help" class="modal" onclick="closeModal('modal_help')">
     <div class="modal-content" onclick="event.stopPropagation()">
@@ -359,7 +388,6 @@
     <div class="close-modal">Закрыть</div>
 </div>
 
-<!-- МОДАЛКА РУЧНОЙ ОФФЛАЙН ГЕНЕРАЦИИ QR-КОДА -->
 <div id="modal_manual_qr" class="modal" onclick="closeModal('modal_manual_qr')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <h2>Оффлайн QR карточка</h2>
@@ -568,9 +596,8 @@
         <div id="marshal_container" style="display:none;">
             <label>Где будет стоять Маршал?</label>
             <select id="marshal_select" onchange="handleMarshalSelect()">
-                <option value="Сзади ФОКа">Сзади ФОКа</option>
-                <option value="Спереди ФОКа">Спереди ФОКа</option>
-                <option value="На перекрестке у детской площадки">На перекрестке</option>
+                <option value="Точка 1">Точка 1</option>
+                <option value="Точка 2">Точка 2</option>
                 <option value="custom">Свой вариант...</option>
             </select>
         </div>
@@ -659,7 +686,7 @@
     // =========================================================================
     // ТОЧКА ПОДКЛЮЧЕНИЯ К ЕДИНОМУ СЕРВЕРНОМУ ЯДРУ (CLOUDFLARE WORKER)
     // =========================================================================
-    const CORE_API_URL = 'https://5verst-multitenant-core.bekovroman0.workers.dev/';
+    const CORE_API_URL = 'https://5verst-multitenant-core.bekovroman0.workers.dev';
     const GITHUB_IMG_BASE = 'https://raw.githubusercontent.com/Weifox1307/5verst_stankozavod_bot_vk/main/';
     
     let selectedVolunteer = null;
@@ -667,7 +694,7 @@
     let customStoryImage = null;
     let storyMode = 'default';
     let isAdmin = false;
-    let currentGroupId = 228375526; // По умолчанию Станкозавод, перезаписывается из параметров запуска ВК
+    let currentGroupId = 228375526; // По умолчанию, перезаписывается из параметров запуска ВК
 
     const runIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M13.49 5.42c1.23 0 2.22-1 2.22-2.22A2.22 2.22 0 0 0 13.5 1a2.22 2.22 0 0 0-2.23 2.22c0 1.22.99 2.2 2.22 2.2M10.34 11l-2.1-1.03c-.34-.17-.55-.52-.55-.91 0-.74.79-1.22 1.45-.91l4.83 2.3c.53.25.87.78.87 1.37V17h-2v-4.43l-1.74-.83V23h-2v-6.95l.45-1.5L7.2 13c-.34-.16-.55-.52-.55-.9 0-.75.8-1.23 1.46-.9l2.23 1.03V11z'/%3E%3C/svg%3E" />`;
     const volIcon = "🧡 ";
@@ -715,7 +742,6 @@
         openModal('modal_role_detail');
     }
 
-    // ОФФЛАЙН ГЕНЕРАТОР ШТРИХКОДОВ И QR (БЕЗ API-СЕРВЕРОВ)
     function showQR(id, name) {
         const cleanId = (id || '').toString().replace(/^A/i, '');
         const fullVerstCode = 'A' + cleanId;
@@ -858,7 +884,6 @@
         document.getElementById('event_date_picker').value = nextSat;
         document.getElementById('event_date').innerText = formatDateDisplay(nextSat);
 
-        // Считываем group_id из параметров запуска ВК или URL
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const urlGroup = urlParams.get('vk_group_id') || urlParams.get('group_id');
@@ -873,36 +898,128 @@
         try {
             vkUser = await vkBridge.send("VKWebAppGetUserInfo");
             
-            // Запрос проверки профиля и прав администратора на единый бэкенд
-            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&check_vk_id=${vkUser.id}`);
+            const res = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}`);
             const data = await res.json();
             
+            // Если группа еще не настроена в базе, открываем окно онбординга
+            if (data.not_configured) {
+                openModal('modal_onboarding');
+                return;
+            }
+
             if (data.park_name) {
                 document.getElementById('park_name').innerText = data.park_name;
                 document.getElementById('about_title').innerText = data.park_name;
             }
 
-            isAdmin = data.is_admin || false; 
-            if (isAdmin) {
-                document.getElementById('park_name').innerHTML += ' <span class="admin-badge">ORG</span>';
-            }
-
-            const themeRes = await fetch(`${CORE_API_URL}?group_id=${currentGroupId}&get_theme=1`);
-            const themeData = await themeRes.json();
-            document.getElementById('theme_input').value = themeData.theme || "";
-
-            if (data.found) {
-                selectedVolunteer = { id: data.verst_id, full_name: data.full_name };
-                document.getElementById('verst_search').value = data.full_name;
-                const welcome = document.getElementById('welcome_back');
-                welcome.style.display = 'block';
-                welcome.innerHTML = `👋 <b>${vkUser.first_name}</b>, профиль привязан!<br><button class="btn-qr" onclick="showQR('${data.verst_id}', '${data.full_name}')" style="margin-top:10px;">МОЯ КАРТОЧКА УЧАСТНИКА</button>`;
-            }
             validateForm();
         } catch (e) { console.error("Init Error:", e); }
         loadQueue(); 
     }
     init();
+
+    // =========================================================================
+    // ЛОГИКА ОНБОРДИНГА И ПОДКЛЮЧЕНИЯ ПАРКА
+    // =========================================================================
+    async function checkNrmsLogin() {
+        const user = document.getElementById('ob_user').value.trim();
+        const pass = document.getElementById('ob_pass').value.trim();
+        const btn = document.getElementById('ob_check_btn');
+
+        if (!user || !pass) return showToast("Введите логин и пароль");
+
+        btn.disabled = true;
+        btn.innerText = "Проверяем в NRMS...";
+
+        try {
+            const res = await fetch(`${CORE_API_URL}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: "check_nrms", nrms_user: user, nrms_pass: pass })
+            });
+            const data = await res.json();
+
+            if (!data.success) {
+                showToast(data.error || "Ошибка авторизации");
+                btn.disabled = false;
+                btn.innerText = "Проверить доступы";
+                return;
+            }
+
+            const select = document.getElementById('ob_park_select');
+            select.innerHTML = '';
+
+            if (data.parks && data.parks.length > 0) {
+                data.parks.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.innerText = `${p.name} (ID: ${p.id})`;
+                    select.appendChild(opt);
+                });
+            } else {
+                const opt = document.createElement('option');
+                opt.value = "10061";
+                opt.innerText = "Основная локация (10061)";
+                select.appendChild(opt);
+            }
+
+            document.getElementById('onboard_step_1').style.display = 'none';
+            document.getElementById('onboard_step_2').style.display = 'block';
+            showToast("Доступы подтверждены!");
+
+        } catch (e) {
+            showToast("Ошибка сети при проверке");
+            btn.disabled = false;
+            btn.innerText = "Проверить доступы";
+        }
+    }
+
+    async function submitParkRegistration() {
+        const select = document.getElementById('ob_park_select');
+        const parkId = select.value;
+        const parkName = select.options[select.selectedIndex]?.text.replace(/\(ID: \d+\)/, '').trim();
+        const vkToken = document.getElementById('ob_vk_token').value.trim();
+        const user = document.getElementById('ob_user').value.trim();
+        const pass = document.getElementById('ob_pass').value.trim();
+        const btn = document.getElementById('ob_save_btn');
+
+        if (!vkToken) return showToast("Вставьте токен группы ВК");
+
+        btn.disabled = true;
+        btn.innerText = "Сохраняем...";
+
+        try {
+            const res = await fetch(`${CORE_API_URL}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: "register_park",
+                    vk_group_id: currentGroupId,
+                    park_id: parkId,
+                    park_name: parkName,
+                    nrms_user: user,
+                    nrms_pass: pass,
+                    vk_access_token: vkToken
+                })
+            });
+            const data = await res.json();
+
+            if (!data.success) {
+                showToast(data.error || "Ошибка сохранения");
+                btn.disabled = false;
+                btn.innerText = "Привязать парк к группе";
+                return;
+            }
+
+            showToast("Парк успешно привязан!");
+            setTimeout(() => location.reload(), 1200);
+
+        } catch (e) {
+            showToast("Ошибка соединения");
+            btn.disabled = false;
+            btn.innerText = "Привязать парк к группе";
+        }
+    }
 
     function showSkeletons() {
         const container = document.getElementById('queue_container');
