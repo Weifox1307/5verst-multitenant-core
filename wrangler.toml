@@ -4,4 +4,3 @@ compatibility_date = "2026-01-01"
 
 [vars]
 SUPABASE_URL = "https://baobsbsqedpnmyauhtso.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhb2JzYnNxZWRwbm15YXVodHNvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjQxOTc0NSwiZXhwIjoyMTA3OTk1NzQ1fQ.SxHxO5f9SR24gql4JXyAnmp2WU7u19KwJz0fiCQE0g8"
